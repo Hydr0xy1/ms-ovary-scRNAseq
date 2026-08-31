@@ -140,6 +140,8 @@ soupsieve==2.9.2
 stack-data==0.6.3
 statsmodels==0.14.6
 stdlib-list==0.12.0
+tbb==2023.1.0
+tcmlib==1.5.0
 terminado==0.18.1
 texttable==1.7.0
 threadpoolctl==3.6.0
