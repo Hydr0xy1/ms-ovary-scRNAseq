@@ -24,7 +24,7 @@ UV_CACHE_DIR=/root/autodl-tmp/.uv-cache UV_CONCURRENT_DOWNLOADS=16 \
 "$python" -m ipykernel install --user --name ovary_sc \
   --display-name 'Python (ovary_sc)'
 
-"$env_dir/bin/uv" pip freeze --python "$python" \
+"$env_dir/bin/uv" pip freeze --python "$python" --exclude-editable \
   > "$project/environment/requirements-lock.txt"
 CONDA_PKGS_DIRS=/root/autodl-tmp/.conda/pkgs \
   "$conda" env export -n ovary_sc --from-history \

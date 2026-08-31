@@ -49,6 +49,7 @@ single-cell sample size is three pools per group, not twelve mice per group.
 
 ```bash
 source environment/activate.sh
+python environment/validate_env.py
 
 python -m compileall -q -f src scripts tests
 pytest -q -m "not integration"
