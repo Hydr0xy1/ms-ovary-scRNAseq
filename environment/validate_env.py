@@ -1,43 +1,35 @@
+from importlib import import_module
 from importlib.metadata import version
 from pathlib import Path
 
 import anndata
-import bbknn
-import celltypist
-import gseapy
-import harmonypy
-import igraph
-import ipykernel
-import jupyterlab
-import leidenalg
-import ms_ovary_scrna
 import numpy as np
 import pandas as pd
-import pydeseq2
 import scanpy as sc
 import scipy.sparse as sp
-import scrublet
-import sklearn
 
+import ms_ovary_scrna
 
 packages = [
-    "igraph",
-    "leidenalg",
-    "scanpy",
-    "anndata",
-    "scrublet",
-    "harmonypy",
-    "bbknn",
-    "celltypist",
-    "pydeseq2",
-    "gseapy",
-    "jupyterlab",
-    "ipykernel",
+    ("igraph", "igraph"),
+    ("leidenalg", "leidenalg"),
+    ("scanpy", "scanpy"),
+    ("anndata", "anndata"),
+    ("scrublet", "scrublet"),
+    ("harmonypy", "harmonypy"),
+    ("bbknn", "bbknn"),
+    ("celltypist", "celltypist"),
+    ("pydeseq2", "pydeseq2"),
+    ("gseapy", "gseapy"),
+    ("jupyterlab", "jupyterlab"),
+    ("ipykernel", "ipykernel"),
+    ("scikit-learn", "sklearn"),
 ]
 
 print("PACKAGE_VERSIONS")
-for package in packages:
-    print(f"{package}={version(package)}")
+for distribution, module in packages:
+    import_module(module)
+    print(f"{distribution}={version(distribution)}")
 print(f"ms-ovary-scrna={ms_ovary_scrna.__version__}")
 
 # Small end-to-end smoke test: sparse counts -> QC -> PCA -> graph -> UMAP -> Leiden.

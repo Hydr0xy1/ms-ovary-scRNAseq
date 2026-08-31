@@ -51,9 +51,7 @@ def run_preprocess_cluster(
     )
     adata.obsm["X_pca"] = hvg.obsm["X_pca"].astype(np.float32, copy=False)
     adata.uns["pca"] = hvg.uns["pca"]
-    adata.varm["PCs"] = np.zeros(
-        (adata.n_vars, hvg.varm["PCs"].shape[1]), dtype=np.float32
-    )
+    adata.varm["PCs"] = np.zeros((adata.n_vars, hvg.varm["PCs"].shape[1]), dtype=np.float32)
     adata.varm["PCs"][adata.var["highly_variable"].to_numpy(), :] = hvg.varm["PCs"]
     del hvg
 
@@ -91,9 +89,7 @@ def run_preprocess_cluster(
         )
     elif integration_method == "none":
         logger.info("Using unintegrated PCA graph")
-        adata.obsp["connectivities"] = adata.obsp[
-            "neighbors_unintegrated_connectivities"
-        ].copy()
+        adata.obsp["connectivities"] = adata.obsp["neighbors_unintegrated_connectivities"].copy()
         adata.obsp["distances"] = adata.obsp["neighbors_unintegrated_distances"].copy()
         adata.uns["neighbors"] = adata.uns["neighbors_unintegrated"].copy()
     else:

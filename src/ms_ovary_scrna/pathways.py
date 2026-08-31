@@ -45,9 +45,7 @@ def run_pathway_rescue(config: dict) -> Path:
         result.insert(0, "cell_type", path.parent.name)
         result.insert(1, "contrast", path.stem)
         summaries.append(result)
-        logger.info(
-            "GSEA: %s/%s (%d pathways)", path.parent.name, path.stem, len(result)
-        )
+        logger.info("GSEA: %s/%s (%d pathways)", path.parent.name, path.stem, len(result))
     combined = pd.concat(summaries, ignore_index=True)
     combined.to_csv(output_root / "custom_pathway_gsea.tsv", sep="\t", index=False)
 
@@ -57,9 +55,7 @@ def run_pathway_rescue(config: dict) -> Path:
     if {"OC_vs_Y", "OT_vs_OC", "OT_vs_Y"}.issubset(pivot.columns):
         pivot["opposite_aging_treatment"] = pivot["OC_vs_Y"] * pivot["OT_vs_OC"] < 0
         pivot["closer_to_y"] = pivot["OT_vs_Y"].abs() < pivot["OC_vs_Y"].abs()
-        pivot["pathway_rescued"] = (
-            pivot["opposite_aging_treatment"] & pivot["closer_to_y"]
-        )
+        pivot["pathway_rescued"] = pivot["opposite_aging_treatment"] & pivot["closer_to_y"]
     pivot.to_csv(output_root / "pathway_rescue_summary.tsv", sep="\t", index=False)
     logger.info("PATHWAY_RESCUE_OK: %s", output_root)
     return output_root

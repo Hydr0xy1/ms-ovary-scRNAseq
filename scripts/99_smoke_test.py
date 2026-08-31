@@ -16,15 +16,55 @@ from scipy import sparse
 
 from ms_ovary_scrna.project import DEFAULT_CONFIG, load_config, project_paths
 
-
 GENES = [
-    "Fshr", "Foxl2", "Amh", "Cyp19a1", "Inha", "Inhbb",
-    "Col1a1", "Col1a2", "Col3a1", "Dcn", "Lum", "Pdgfra",
-    "Ptprc", "Lcp1", "Tyrobp", "Adgre1", "Csf1r", "Lyz2",
-    "Cdkn2a", "Cdkn1a", "Trp53", "Serpine1", "Il6", "Il1b", "Tnf", "Ccl2",
-    "Nfe2l2", "Keap1", "Hmox1", "Nqo1", "Sod1", "Sod2", "Cat", "Gpx1",
-    "Star", "Cyp11a1", "Cyp17a1", "Hsd3b1", "Lhcgr", "Scarb1",
-    "Bax", "Bcl2", "Casp3", "Casp9", "Pecam1", "Cdh5", "Kdr", "Emcn",
+    "Fshr",
+    "Foxl2",
+    "Amh",
+    "Cyp19a1",
+    "Inha",
+    "Inhbb",
+    "Col1a1",
+    "Col1a2",
+    "Col3a1",
+    "Dcn",
+    "Lum",
+    "Pdgfra",
+    "Ptprc",
+    "Lcp1",
+    "Tyrobp",
+    "Adgre1",
+    "Csf1r",
+    "Lyz2",
+    "Cdkn2a",
+    "Cdkn1a",
+    "Trp53",
+    "Serpine1",
+    "Il6",
+    "Il1b",
+    "Tnf",
+    "Ccl2",
+    "Nfe2l2",
+    "Keap1",
+    "Hmox1",
+    "Nqo1",
+    "Sod1",
+    "Sod2",
+    "Cat",
+    "Gpx1",
+    "Star",
+    "Cyp11a1",
+    "Cyp17a1",
+    "Hsd3b1",
+    "Lhcgr",
+    "Scarb1",
+    "Bax",
+    "Bcl2",
+    "Casp3",
+    "Casp9",
+    "Pecam1",
+    "Cdh5",
+    "Kdr",
+    "Emcn",
 ] + [f"Gene{i}" for i in range(72)]
 
 
@@ -119,7 +159,11 @@ def main() -> None:
         )
         config["pseudobulk"] = dict(source_config["pseudobulk"])
         config["pseudobulk"].update(
-            {"cell_type_key": "synthetic_cell_type", "min_cells_per_sample_cell_type": 5, "n_cpus": 1}
+            {
+                "cell_type_key": "synthetic_cell_type",
+                "min_cells_per_sample_cell_type": 5,
+                "n_cpus": 1,
+            }
         )
         config["pathway"] = dict(source_config["pathway"])
         config["pathway"].update({"permutations": 20, "min_size": 3})
@@ -135,7 +179,9 @@ def main() -> None:
         )
         pd.DataFrame(
             {
-                "library_id": [f"{group}_{rep}" for group in ("Y", "OC", "OT") for rep in range(1, 4)],
+                "library_id": [
+                    f"{group}_{rep}" for group in ("Y", "OC", "OT") for rep in range(1, 4)
+                ],
                 "group": [group for group in ("Y", "OC", "OT") for _ in range(3)],
             }
         ).to_csv(tmp_root / "metadata" / "sample_metadata.tsv", sep="\t", index=False)
@@ -156,19 +202,51 @@ def main() -> None:
         )
         python = sys.executable
         run(
-            [python, str(script_dir / "02_qc.py"), str(synthetic), "--config", str(config_path), "--skip-scrublet", "--apply-filter", "--allow-low-memory"],
+            [
+                python,
+                str(script_dir / "02_qc.py"),
+                str(synthetic),
+                "--config",
+                str(config_path),
+                "--skip-scrublet",
+                "--apply-filter",
+                "--allow-low-memory",
+            ],
             env,
         )
         run(
-            [python, str(script_dir / "03_preprocess_cluster.py"), str(tmp_root / "results" / "02_qc_filtered.h5ad"), "--config", str(config_path), "--integration", "harmony", "--allow-low-memory"],
+            [
+                python,
+                str(script_dir / "03_preprocess_cluster.py"),
+                str(tmp_root / "results" / "02_qc_filtered.h5ad"),
+                "--config",
+                str(config_path),
+                "--integration",
+                "harmony",
+                "--allow-low-memory",
+            ],
             env,
         )
         run(
-            [python, str(script_dir / "04_annotate.py"), str(tmp_root / "results" / "03_clustered.h5ad"), "--config", str(config_path), "--allow-low-memory"],
+            [
+                python,
+                str(script_dir / "04_annotate.py"),
+                str(tmp_root / "results" / "03_clustered.h5ad"),
+                "--config",
+                str(config_path),
+                "--allow-low-memory",
+            ],
             env,
         )
         run(
-            [python, str(script_dir / "05_pseudobulk_de.py"), str(tmp_root / "results" / "04_annotated.h5ad"), "--config", str(config_path), "--allow-low-memory"],
+            [
+                python,
+                str(script_dir / "05_pseudobulk_de.py"),
+                str(tmp_root / "results" / "04_annotated.h5ad"),
+                "--config",
+                str(config_path),
+                "--allow-low-memory",
+            ],
             env,
         )
         run([python, str(script_dir / "06_pathway_rescue.py"), "--config", str(config_path)], env)

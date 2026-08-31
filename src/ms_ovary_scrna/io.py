@@ -119,8 +119,7 @@ def build_merged(
         )
         adata.X = sparse.csr_matrix(adata.X)
         adata.obs_names = [
-            f"{library_id}{ingest['barcode_separator']}{barcode}"
-            for barcode in adata.obs_names
+            f"{library_id}{ingest['barcode_separator']}{barcode}" for barcode in adata.obs_names
         ]
         for column, value in row.items():
             adata.obs[column] = str(value)
@@ -148,8 +147,8 @@ def build_merged(
 
     output_path = Path(output).resolve() if output else paths["results"] / "01_merged_counts.h5ad"
     merged.write_h5ad(output_path, compression="gzip")
-    pd.DataFrame(
-        {"cells": merged.obs.groupby("library_id", observed=True).size()}
-    ).to_csv(paths["results"] / "01_cells_by_library.tsv", sep="\t")
+    pd.DataFrame({"cells": merged.obs.groupby("library_id", observed=True).size()}).to_csv(
+        paths["results"] / "01_cells_by_library.tsv", sep="\t"
+    )
     logger.info("MERGE_OK: %s shape=%s", output_path, merged.shape)
     return output_path

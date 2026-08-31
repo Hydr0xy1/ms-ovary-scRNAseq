@@ -67,9 +67,7 @@ def run_scrublet_per_library(adata: ad.AnnData, config: dict, logger) -> None:
             random_state=int(config["project"]["random_seed"]),
         )
         adata.obs.loc[mask, "doublet_score"] = subset.obs["doublet_score"].to_numpy()
-        adata.obs.loc[mask, "predicted_doublet"] = subset.obs[
-            "predicted_doublet"
-        ].to_numpy()
+        adata.obs.loc[mask, "predicted_doublet"] = subset.obs["predicted_doublet"].to_numpy()
 
 
 def run_qc(
@@ -89,9 +87,7 @@ def run_qc(
     adata.var["mt"] = adata.var_names.str.startswith(qc["mouse_mt_prefix"])
     adata.var["ribo"] = adata.var_names.str.match(qc["mouse_ribo_regex"])
     adata.var["hb"] = adata.var_names.str.match(qc["mouse_hb_regex"])
-    sc.pp.calculate_qc_metrics(
-        adata, qc_vars=["mt", "ribo", "hb"], percent_top=None, inplace=True
-    )
+    sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], percent_top=None, inplace=True)
     mark_sample_outliers(adata, config)
     if qc["apply_scrublet"] and not skip_scrublet:
         run_scrublet_per_library(adata, config, logger)

@@ -77,16 +77,10 @@ def run_celltypist(adata: ad.AnnData, config: dict, logger) -> None:
         model=annotation["celltypist_model"],
         majority_voting=True,
     ).to_adata()
-    label_col = (
-        "majority_voting" if "majority_voting" in prediction.obs else "predicted_labels"
-    )
-    adata.obs["celltypist_label"] = pd.Series(
-        "Not_assessed", index=adata.obs_names, dtype="string"
-    )
+    label_col = "majority_voting" if "majority_voting" in prediction.obs else "predicted_labels"
+    adata.obs["celltypist_label"] = pd.Series("Not_assessed", index=adata.obs_names, dtype="string")
     adata.obs["celltypist_confidence"] = np.nan
-    adata.obs.loc[prediction.obs_names, "celltypist_label"] = prediction.obs[
-        label_col
-    ].astype(str)
+    adata.obs.loc[prediction.obs_names, "celltypist_label"] = prediction.obs[label_col].astype(str)
     adata.obs.loc[prediction.obs_names, "celltypist_confidence"] = prediction.obs[
         "conf_score"
     ].to_numpy()
@@ -117,8 +111,8 @@ def run_annotation(
         raise ValueError("No broad marker panels contain at least two genes in the dataset")
     score_frame = adata.obs.groupby(cluster_key, observed=True)[score_columns].mean()
     score_frame.to_csv(paths["results"] / "04_cluster_marker_scores.tsv", sep="\t")
-    broad_winner = score_frame[broad_scores].idxmax(axis=1).str.replace(
-        "score__broad__", "", regex=False
+    broad_winner = (
+        score_frame[broad_scores].idxmax(axis=1).str.replace("score__broad__", "", regex=False)
     )
     adata.obs["cell_type_marker_provisional"] = (
         adata.obs[cluster_key].map(broad_winner).astype("category")

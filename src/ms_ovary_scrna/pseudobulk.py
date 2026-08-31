@@ -26,9 +26,7 @@ def aggregate_cell_type(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     sample_series = adata.obs[sample_key].astype(str)
     cell_series = adata.obs[cell_type_key].astype(str)
-    sample_to_group = (
-        adata.obs.groupby(sample_key, observed=True)[group_key].first().astype(str)
-    )
+    sample_to_group = adata.obs.groupby(sample_key, observed=True)[group_key].first().astype(str)
     records: list[np.ndarray] = []
     sample_names: list[str] = []
     metadata_records: list[dict[str, str]] = []
@@ -162,12 +160,10 @@ def run_pseudobulk(
     output_root.mkdir(parents=True, exist_ok=True)
     cell_counts.to_csv(output_root / "cells_per_sample_cell_type.tsv", sep="\t")
 
-    group_by_sample = adata.obs.groupby(
-        settings["sample_key"], observed=True
-    )[settings["group_key"]].first()
-    required_groups = {
-        str(level) for contrast in settings["contrasts"] for level in contrast[1:]
-    }
+    group_by_sample = adata.obs.groupby(settings["sample_key"], observed=True)[
+        settings["group_key"]
+    ].first()
+    required_groups = {str(level) for contrast in settings["contrasts"] for level in contrast[1:]}
     eligible_cell_types: list[str] = []
     for cell_type in cell_counts.columns.astype(str):
         eligible_samples = cell_counts.index[

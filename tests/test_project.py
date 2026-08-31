@@ -6,6 +6,4 @@ def test_default_paths_are_repository_relative() -> None:
     assert paths["root"] == REPOSITORY_ROOT
     assert paths["input"] == REPOSITORY_ROOT / "data" / "Summary"
     assert paths["metadata"] == REPOSITORY_ROOT / "metadata" / "sample_metadata.tsv"
-    assert paths["markers"] == (
-        REPOSITORY_ROOT / "resources" / "markers" / "ovary_markers.yaml"
-    )
+    assert paths["markers"] == (REPOSITORY_ROOT / "resources" / "markers" / "ovary_markers.yaml")

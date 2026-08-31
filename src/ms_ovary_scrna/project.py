@@ -9,7 +9,6 @@ from typing import Any
 import pandas as pd
 import yaml
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPOSITORY_ROOT / "config" / "analysis_config.yaml"
 
@@ -34,9 +33,7 @@ def project_paths(config: dict[str, Any]) -> dict[str, Path]:
     root_setting = os.environ.get("OVARY_PROJECT_ROOT", project.get("root", "."))
     root_path = Path(root_setting).expanduser()
     root = (
-        root_path.resolve()
-        if root_path.is_absolute()
-        else (REPOSITORY_ROOT / root_path).resolve()
+        root_path.resolve() if root_path.is_absolute() else (REPOSITORY_ROOT / root_path).resolve()
     )
     paths = {
         "root": root,
@@ -91,9 +88,7 @@ def cgroup_memory_limit_gib() -> float | None:
     return None
 
 
-def require_compute_resources(
-    config: dict[str, Any], *, allow_low_memory: bool = False
-) -> None:
+def require_compute_resources(config: dict[str, Any], *, allow_low_memory: bool = False) -> None:
     if allow_low_memory or os.environ.get("OVARY_ALLOW_LOW_MEMORY") == "1":
         return
     if not config["resources"].get("guard_heavy_jobs", True):

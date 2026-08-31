@@ -7,7 +7,6 @@ from scipy import sparse
 
 from ms_ovary_scrna.project import DEFAULT_CONFIG, load_config, project_paths
 
-
 SAMPLE = "OT_3"
 EXPECTED_SHAPE = (9844, 57132)
 EXPECTED_NNZ = 32524350
