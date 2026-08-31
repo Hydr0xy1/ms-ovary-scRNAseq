@@ -10,11 +10,13 @@ import pandas as pd
 import yaml
 
 
-DEFAULT_CONFIG = Path("/root/autodl-tmp/ovary_scRNAseq/config/analysis_config.yaml")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = REPOSITORY_ROOT / "config" / "analysis_config.yaml"
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG) -> dict[str, Any]:
-    with Path(path).open(encoding="utf-8") as handle:
+    config_path = Path(path).expanduser().resolve()
+    with config_path.open(encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
     for key in ("project", "resources", "ingest", "qc", "preprocess"):
         if key not in config:
@@ -22,17 +24,30 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> dict[str, Any]:
     return config
 
 
+def _resolve_from_root(root: Path, value: str | Path) -> Path:
+    path = Path(value).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
 def project_paths(config: dict[str, Any]) -> dict[str, Path]:
     project = config["project"]
+    root_setting = os.environ.get("OVARY_PROJECT_ROOT", project.get("root", "."))
+    root_path = Path(root_setting).expanduser()
+    root = (
+        root_path.resolve()
+        if root_path.is_absolute()
+        else (REPOSITORY_ROOT / root_path).resolve()
+    )
     paths = {
-        "root": Path(project["root"]),
-        "input": Path(project["input_dir"]),
-        "results": Path(project["result_dir"]),
-        "figures": Path(project["figure_dir"]),
-        "logs": Path(project["log_dir"]),
-        "metadata": Path(project["metadata"]),
-        "markers": Path(project["marker_file"]),
-        "pathways": Path(project["pathway_file"]),
+        "root": root,
+        "input": _resolve_from_root(root, project["input_dir"]),
+        "results": _resolve_from_root(root, project["result_dir"]),
+        "figures": _resolve_from_root(root, project["figure_dir"]),
+        "logs": _resolve_from_root(root, project["log_dir"]),
+        "metadata": _resolve_from_root(root, project["metadata"]),
+        "markers": _resolve_from_root(root, project["marker_file"]),
+        "pathways": _resolve_from_root(root, project["pathway_file"]),
+        "cluster_labels": _resolve_from_root(root, project["cluster_labels"]),
     }
     for key in ("results", "figures", "logs"):
         paths[key].mkdir(parents=True, exist_ok=True)

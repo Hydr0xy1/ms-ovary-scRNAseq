@@ -10,6 +10,7 @@ import igraph
 import ipykernel
 import jupyterlab
 import leidenalg
+import ms_ovary_scrna
 import numpy as np
 import pandas as pd
 import pydeseq2
@@ -37,6 +38,7 @@ packages = [
 print("PACKAGE_VERSIONS")
 for package in packages:
     print(f"{package}={version(package)}")
+print(f"ms-ovary-scrna={ms_ovary_scrna.__version__}")
 
 # Small end-to-end smoke test: sparse counts -> QC -> PCA -> graph -> UMAP -> Leiden.
 rng = np.random.default_rng(20260810)
@@ -57,6 +59,7 @@ sc.tl.leiden(adata, resolution=0.5, random_state=0)
 assert adata.obsm["X_umap"].shape == (120, 2)
 assert "leiden" in adata.obs
 
-output = Path("/root/autodl-tmp/ovary_scRNAseq/logs/environment_smoke_test.h5ad")
+project_root = Path(__file__).resolve().parents[1]
+output = project_root / "logs" / "environment_smoke_test.h5ad"
 adata.write_h5ad(output, compression="gzip")
 print(f"SMOKE_TEST_OK={output}")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project=/root/autodl-tmp/ovary_scRNAseq
+project=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 archive=/root/autodl-tmp/Summary.tar.gz
 destination="$project/data"
 mkdir -p "$destination"
@@ -15,7 +15,7 @@ find "$destination/Summary" -type f -exec chmod 0444 {} +
 find "$destination/Summary" -type d -exec chmod 0555 {} +
 
 printf 'sample\tgenes\tcells\tmatrix_rows\tmatrix_cols\tnnz\n' \
-  > "$project/config/sample_inventory.tsv"
+  > "$project/metadata/sample_inventory.tsv"
 for sample_dir in "$destination"/Summary/*; do
   sample=$(basename "$sample_dir")
   genes=$(gzip -dc "$sample_dir/features.tsv.gz" | wc -l)
@@ -25,8 +25,8 @@ for sample_dir in "$destination"/Summary/*; do
   read -r rows cols nnz <<< "$header"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$sample" "$genes" "$cells" "$rows" "$cols" "$nnz" \
-    >> "$project/config/sample_inventory.tsv"
+    >> "$project/metadata/sample_inventory.tsv"
 done
 
-cat "$project/config/sample_inventory.tsv"
+cat "$project/metadata/sample_inventory.tsv"
 du -sh "$destination/Summary"

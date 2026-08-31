@@ -14,7 +14,7 @@ import pandas as pd
 import yaml
 from scipy import sparse
 
-from _project import DEFAULT_CONFIG, load_config
+from ms_ovary_scrna.project import DEFAULT_CONFIG, load_config, project_paths
 
 
 GENES = [
@@ -78,10 +78,20 @@ def main() -> None:
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
     source_config = load_config(args.config)
+    source_paths = project_paths(source_config)
     script_dir = Path(__file__).resolve().parent
     tmp_root = Path(tempfile.mkdtemp(prefix="ovary_smoke_"))
     try:
-        for name in ("results", "figures", "logs", "config", "data"):
+        for name in (
+            "results",
+            "figures",
+            "logs",
+            "config",
+            "data",
+            "metadata",
+            "resources/markers",
+            "resources/gene_sets",
+        ):
             (tmp_root / name).mkdir(parents=True, exist_ok=True)
         synthetic = tmp_root / "synthetic_counts.h5ad"
         make_synthetic(synthetic, int(source_config["project"]["random_seed"]))
@@ -91,13 +101,14 @@ def main() -> None:
         config["project"].update(
             {
                 "root": str(tmp_root),
-                "input_dir": str(tmp_root / "data"),
-                "result_dir": str(tmp_root / "results"),
-                "figure_dir": str(tmp_root / "figures"),
-                "log_dir": str(tmp_root / "logs"),
-                "metadata": str(tmp_root / "config" / "sample_metadata.tsv"),
-                "marker_file": source_config["project"]["marker_file"],
-                "pathway_file": source_config["project"]["pathway_file"],
+                "input_dir": "data",
+                "result_dir": "results",
+                "figure_dir": "figures",
+                "log_dir": "logs",
+                "metadata": "metadata/sample_metadata.tsv",
+                "marker_file": "resources/markers/ovary_markers.yaml",
+                "pathway_file": "resources/gene_sets/pathway_gene_sets.yaml",
+                "cluster_labels": "metadata/cluster_labels.tsv",
             }
         )
         config["qc"] = dict(source_config["qc"])
@@ -114,13 +125,21 @@ def main() -> None:
         config["pathway"].update({"permutations": 20, "min_size": 3})
         config_path = tmp_root / "config" / "smoke_config.yaml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        shutil.copy2(
+            source_paths["markers"],
+            tmp_root / "resources" / "markers" / "ovary_markers.yaml",
+        )
+        shutil.copy2(
+            source_paths["pathways"],
+            tmp_root / "resources" / "gene_sets" / "pathway_gene_sets.yaml",
+        )
         pd.DataFrame(
             {
                 "library_id": [f"{group}_{rep}" for group in ("Y", "OC", "OT") for rep in range(1, 4)],
                 "group": [group for group in ("Y", "OC", "OT") for _ in range(3)],
             }
-        ).to_csv(tmp_root / "config" / "sample_metadata.tsv", sep="\t", index=False)
-        (tmp_root / "config" / "cluster_labels.tsv").write_text(
+        ).to_csv(tmp_root / "metadata" / "sample_metadata.tsv", sep="\t", index=False)
+        (tmp_root / "metadata" / "cluster_labels.tsv").write_text(
             "cluster\tcell_type_final\tannotation_notes\n", encoding="utf-8"
         )
 

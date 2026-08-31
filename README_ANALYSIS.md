@@ -1,6 +1,6 @@
-# Mouse ovary scRNA-seq analysis scaffold
+# Mouse ovary scRNA-seq analysis
 
-Biological groups:
+Reproducible Scanpy workflow for the following biological groups:
 
 - `Y`: 4-month vehicle control
 - `OC`: 10-month vehicle control
@@ -12,71 +12,82 @@ Primary contrasts:
 - `OT vs OC`: MRJP1 treatment effect
 - `OT vs Y`: residual deviation from the young state
 
-## Resource policy
+## Code organization
 
-The current no-card container is limited to 2 GiB RAM and 0.5 CPU. Only the
-commands marked **NO-CARD SAFE** should be run in that mode. Heavy scripts have
-a cgroup-memory guard and will refuse to run until compute mode is enabled.
+- `src/ms_ovary_scrna/`: reusable, tested Python functions
+- `scripts/`: thin command-line entry points and ordered workflow stages
+- `config/`: scientific parameters only
+- `metadata/`: sample metadata, inventory, and curated cluster labels
+- `resources/`: ovarian marker panels and pathway gene sets
+- `environment/`: dependency specifications and activation/bootstrap helpers
+- `notebooks/`: interactive review of small result tables and figures
+- `tests/`: unit, integration, and synthetic regression tests
+- `data/`, `results/`, `figures/`, `logs/`: runtime files excluded from Git
 
-Recommended compute mode: at least 64 GiB RAM and 8-16 CPU cores.
+See `docs/DEVELOPMENT.md` before adding new code.
+
+## Environment
+
+On the configured server:
+
+```bash
+cd /root/autodl-tmp/ovary_scRNAseq
+source environment/activate.sh
+python -m pip install --no-deps -e .
+```
+
+The editable installation makes `ms_ovary_scrna` importable while keeping the
+source of truth in this Git checkout.
 
 ## Before analysis
 
-Edit `config/sample_metadata.tsv` and replace every `TODO` or `unknown` value
-that can be recovered. In particular, record the mouse IDs contributing to each
-library. If four mice were pooled into each library, the formal scRNA-seq sample
-size is three pools per group, not twelve mice per group.
+Edit `metadata/sample_metadata.tsv` and replace every recoverable `TODO` or
+`unknown` value. If four mice were pooled into each library, the formal
+single-cell sample size is three pools per group, not twelve mice per group.
 
-## NO-CARD SAFE commands
+## Safe preflight and regression tests
 
 ```bash
-source /root/autodl-tmp/ovary_scRNAseq/config/activate.sh
+source environment/activate.sh
 
-# Syntax only
-python -m py_compile scripts/*.py
-
-# Input dimensions, barcode/feature consistency, and feature hash
+python -m compileall -q -f src scripts tests
+pytest -q -m "not integration"
 python scripts/00_validate_inputs.py
 
-# Optional full CRC check; safe but slow with 0.5 CPU
-python scripts/00_validate_inputs.py --full-gzip-test
-
-# Tiny synthetic end-to-end test; never opens the real matrices
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 NUMBA_NUM_THREADS=1 python scripts/99_smoke_test.py
 ```
 
-## COMPUTE MODE commands
+## Compute workflow
 
 Run each stage separately and review its output before continuing.
 
 ```bash
-source /root/autodl-tmp/ovary_scRNAseq/config/activate.sh
+source environment/activate.sh
 
-# 1. Merge all libraries and preserve raw counts
+# 1. Merge all libraries and preserve raw counts.
 python scripts/01_build_merged.py
 
-# 2a. Annotate QC failures without deleting cells
+# 2a. Annotate QC failures without deleting cells.
 python scripts/02_qc.py results/01_merged_counts.h5ad
 
 # Review results/02_qc_summary.tsv and figures/02_qc_before_filtering.png.
-# Adjust config/analysis_config.yaml if necessary, then apply filters:
+# Only after biological review, apply the proposed filters.
 python scripts/02_qc.py results/01_merged_counts.h5ad --apply-filter
 
-# 3. Normalize, select batch-aware HVGs, compare unintegrated/Harmony, cluster
+# 3. Normalize, select batch-aware HVGs, compare unintegrated/Harmony, cluster.
 python scripts/03_preprocess_cluster.py results/02_qc_filtered.h5ad
 
-# 4. Marker-guided annotation draft; CellTypist is off by default
+# 4. Marker-guided annotation draft; CellTypist is off by default.
 python scripts/04_annotate.py results/03_clustered.h5ad
 
-# Review marker tables, fill config/cluster_labels.tsv, then rerun stage 4.
-# Optional immune-only CellTypist pass:
+# Review marker tables, fill metadata/cluster_labels.tsv, then rerun stage 4.
 python scripts/04_annotate.py results/03_clustered.h5ad --run-celltypist
 
-# 5. Sample-level pseudobulk DE and gene rescue classification
+# 5. Sample-level pseudobulk DE and gene rescue classification.
 python scripts/05_pseudobulk_de.py results/04_annotated.h5ad
 
-# 6. Custom ovarian pathway GSEA and pathway rescue summary
+# 6. Custom ovarian pathway GSEA and pathway rescue summary.
 python scripts/06_pathway_rescue.py
 ```
 
@@ -92,4 +103,4 @@ python scripts/06_pathway_rescue.py
 
 Integrated embeddings are used only for graph construction, visualization, and
 clustering. Differential expression always uses the untouched integer UMI layer
-`counts`, aggregated by library and final cell type.
+`counts`, aggregated by library and curated cell type.

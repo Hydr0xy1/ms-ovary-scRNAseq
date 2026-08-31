@@ -18,3 +18,7 @@ ipywidgets
 openpyxl
 pyarrow
 session-info2
+
+# Development, syntax, and regression tests
+pytest
+ruff

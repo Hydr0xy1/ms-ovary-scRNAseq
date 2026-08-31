@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project=/root/autodl-tmp/ovary_scRNAseq
-source "$project/config/activate.sh"
+project=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$project/environment/activate.sh"
 
 python scripts/01_build_merged.py
 python scripts/02_qc.py results/01_merged_counts.h5ad

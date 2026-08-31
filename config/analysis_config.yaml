@@ -1,12 +1,14 @@
 project:
-  root: /root/autodl-tmp/ovary_scRNAseq
-  input_dir: /root/autodl-tmp/ovary_scRNAseq/data/Summary
-  result_dir: /root/autodl-tmp/ovary_scRNAseq/results
-  figure_dir: /root/autodl-tmp/ovary_scRNAseq/figures
-  log_dir: /root/autodl-tmp/ovary_scRNAseq/logs
-  metadata: /root/autodl-tmp/ovary_scRNAseq/config/sample_metadata.tsv
-  marker_file: /root/autodl-tmp/ovary_scRNAseq/config/ovary_markers.yaml
-  pathway_file: /root/autodl-tmp/ovary_scRNAseq/config/pathway_gene_sets.yaml
+  # All relative paths are resolved from the Git repository root.
+  root: .
+  input_dir: data/Summary
+  result_dir: results
+  figure_dir: figures
+  log_dir: logs
+  metadata: metadata/sample_metadata.tsv
+  marker_file: resources/markers/ovary_markers.yaml
+  pathway_file: resources/gene_sets/pathway_gene_sets.yaml
+  cluster_labels: metadata/cluster_labels.tsv
   random_seed: 20260811
 
 resources:
