@@ -1,0 +1,89 @@
+project:
+  root: /root/autodl-tmp/ovary_scRNAseq
+  input_dir: /root/autodl-tmp/ovary_scRNAseq/data/Summary
+  result_dir: /root/autodl-tmp/ovary_scRNAseq/results
+  figure_dir: /root/autodl-tmp/ovary_scRNAseq/figures
+  log_dir: /root/autodl-tmp/ovary_scRNAseq/logs
+  metadata: /root/autodl-tmp/ovary_scRNAseq/config/sample_metadata.tsv
+  marker_file: /root/autodl-tmp/ovary_scRNAseq/config/ovary_markers.yaml
+  pathway_file: /root/autodl-tmp/ovary_scRNAseq/config/pathway_gene_sets.yaml
+  random_seed: 20260811
+
+resources:
+  no_card_memory_gib: 2
+  recommended_compute_memory_gib: 64
+  recommended_compute_cpus: 16
+  guard_heavy_jobs: true
+
+ingest:
+  var_names: gene_symbols
+  make_unique: true
+  gene_expression_only: true
+  barcode_separator: "-"
+  counts_layer: counts
+
+qc:
+  mouse_mt_prefix: "mt-"
+  mouse_ribo_regex: "^Rp[sl]"
+  mouse_hb_regex: "^Hb(?!p)"
+  min_genes_initial: 200
+  min_cells_per_gene: 10
+  counts_n_mads: 5.0
+  genes_n_mads: 5.0
+  mt_n_mads: 3.0
+  hard_mt_pct: null
+  expected_doublet_rate: 0.06
+  apply_scrublet: true
+  filter_predicted_doublets: true
+
+preprocess:
+  target_sum: 10000
+  hvg_flavor: seurat_v3
+  n_top_hvg: 3000
+  hvg_batch_key: library_id
+  scale_max_value: 10
+  n_pcs: 50
+  n_neighbors: 15
+  use_n_pcs: 40
+
+integration:
+  primary: harmony
+  batch_key: library_id
+  retain_unintegrated_graph: true
+  compare_with_unintegrated: true
+
+clustering:
+  resolutions: [0.3, 0.5, 0.8, 1.0]
+  primary_resolution: 0.5
+
+annotation:
+  cluster_key: leiden_0.5
+  broad_label_key: cell_type_broad
+  final_label_key: cell_type_final
+  run_celltypist: false
+  celltypist_model: Immune_All_Low.pkl
+  celltypist_immune_only: true
+  provisional_confidence: 0.5
+  uncertain_confidence: 0.2
+
+pseudobulk:
+  sample_key: library_id
+  group_key: group
+  cell_type_key: cell_type_final
+  min_cells_per_sample_cell_type: 30
+  min_samples_per_group: 3
+  design: "~group"
+  contrasts:
+    - [group, OC, Y]
+    - [group, OT, OC]
+    - [group, OT, Y]
+  alpha: 0.05
+  min_total_counts_gene: 10
+  n_cpus: 4
+
+pathway:
+  ranking_column: stat
+  permutations: 1000
+  min_size: 5
+  max_size: 500
+  rescue_min_abs_aging_lfc: 0.25

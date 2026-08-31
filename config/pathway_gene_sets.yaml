@@ -1,0 +1,30 @@
+Ovarian_follicle_support:
+  [Fshr, Foxl2, Amh, Inha, Inhbb, Kitl, Igf1, Bmp6, Gja1]
+Steroidogenesis:
+  [Star, Cyp11a1, Cyp17a1, Hsd3b1, Hsd17b1, Cyp19a1, Lhcgr, Scarb1, Nr5a1]
+Oocyte_support_signaling:
+  [Gdf9, Bmp15, Kit, Kitl, Bmpr2, Alk5, Smad2, Smad3, Gja1, Gja4]
+Cellular_senescence_SASP:
+  [Cdkn2a, Cdkn1a, Trp53, Serpine1, Igfbp3, Igfbp7, Il6, Il1b, Tnf, Ccl2, Cxcl1, Cxcl2]
+DNA_damage_response:
+  [H2afx, Atm, Atr, Chek1, Chek2, Brca1, Brca2, Rad51, Gadd45a, Mdm2]
+Oxidative_stress_defense:
+  [Nfe2l2, Keap1, Hmox1, Nqo1, Sod1, Sod2, Cat, Gpx1, Gpx4, Txnrd1, Prdx1]
+Mitochondrial_biogenesis_function:
+  [Ppargc1a, Tfam, Nrf1, Polg, Sirt1, Sirt3, Ucp2, Cox4i1, Atp5f1a]
+Apoptosis:
+  [Bax, Bcl2, Bcl2l1, Bbc3, Pmaip1, Casp3, Casp7, Casp9, Apaf1, Cycs]
+ECM_fibrosis_TGFb:
+  [Col1a1, Col1a2, Col3a1, Fn1, Dcn, Lum, Tgfb1, Tgfbr1, Tgfbr2, Serpine1, Acta2, Lox, Mmp2, Timp1]
+Inflammation_NFkB:
+  [Nfkb1, Rela, Relb, Nfkbia, Tnf, Il1b, Il6, Ccl2, Cxcl2, Ptgs2, Tlr4, Myd88]
+Angiogenesis_endothelial_support:
+  [Vegfa, Kdr, Flt1, Pecam1, Cdh5, Klf2, Eng, Tek, Angpt1, Angpt2, Nos3]
+Autophagy:
+  [Becn1, Atg5, Atg7, Atg12, Map1lc3b, Sqstm1, Ulk1, Tfeb, Lamp1]
+AMPK_mTOR_balance:
+  [Prkaa1, Prkaa2, Mtor, Rptor, Rictor, Tsc1, Tsc2, Rheb, Rps6kb1, Eif4ebp1]
+Macrophage_phagocytosis_repair:
+  [C1qa, C1qb, C1qc, Mertk, Axl, Trem2, Apoe, Lpl, Mrc1, Cd163]
+Interferon_response:
+  [Stat1, Stat2, Irf7, Isg15, Ifit1, Ifit2, Ifit3, Oas1a, Mx1]

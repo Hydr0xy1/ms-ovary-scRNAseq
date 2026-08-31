@@ -1,0 +1,54 @@
+broad:
+  Granulosa:
+    positive: [Fshr, Foxl2, Amh, Cyp19a1, Inha, Inhbb]
+    exclude: [Ptprc, Pecam1, Col1a1]
+  Theca_steroidogenic:
+    positive: [Cyp17a1, Star, Cyp11a1, Hsd3b1, Lhcgr, Insl3]
+    exclude: [Ptprc, Pecam1]
+  Stromal_fibroblast:
+    positive: [Col1a1, Col1a2, Col3a1, Dcn, Lum, Pdgfra]
+    exclude: [Ptprc, Pecam1]
+  Endothelial:
+    positive: [Pecam1, Cdh5, Kdr, Emcn, Klf2, Tek]
+    exclude: [Ptprc, Col1a1]
+  Pericyte:
+    positive: [Rgs5, Pdgfrb, Cspg4, Mcam, Des]
+    exclude: [Ptprc, Pecam1]
+  Smooth_muscle:
+    positive: [Acta2, Tagln, Myh11, Cnn1]
+    exclude: [Ptprc]
+  Ovarian_epithelium:
+    positive: [Krt8, Krt18, Krt19, Wt1, Upk3b]
+    exclude: [Ptprc, Pecam1]
+  Oocyte:
+    positive: [Ddx4, Zp1, Zp2, Zp3, Gdf9, Bmp15, Nobox]
+    exclude: [Ptprc]
+  Immune:
+    positive: [Ptprc, Lcp1, Tyrobp]
+    exclude: [Krt18, Cyp19a1]
+
+immune:
+  Macrophage:
+    positive: [Adgre1, Csf1r, Lyz2, Fcgr1, C1qa, C1qb, C1qc]
+  Inflammatory_monocyte:
+    positive: [Ly6c2, S100a8, S100a9, Ccr2, Lyz2]
+  Dendritic:
+    positive: [Itgax, H2-Ab1, Cd74, Flt3, Clec10a]
+  T_cell:
+    positive: [Cd3d, Cd3e, Trac, Trbc1, Lck]
+  B_cell:
+    positive: [Cd79a, Ms4a1, Cd74, Cd37, Cd19]
+  NK_cell:
+    positive: [Nkg7, Klrd1, Ncr1, Prf1, Gzmb]
+
+granulosa_states:
+  Follicle_support:
+    positive: [Fshr, Amh, Foxl2, Inha, Inhbb]
+  Estrogenic:
+    positive: [Cyp19a1, Hsd17b1, Fshr, Inha]
+  Ovulatory_cumulus:
+    positive: [Has2, Ptx3, Tnfaip6, Ptgs2, Areg, Ereg]
+  Luteinizing:
+    positive: [Lhcgr, Star, Cyp11a1, Hsd3b1, Pgr]
+  Atretic_stress:
+    positive: [Bax, Casp3, Ddit3, Atf4, Jun, Fos]

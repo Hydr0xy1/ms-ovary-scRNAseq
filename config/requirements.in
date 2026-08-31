@@ -1,0 +1,20 @@
+# Core scverse stack (versions selected from the active skills)
+scanpy[leiden]==1.12.1
+anndata==0.12.16
+
+# QC, integration, annotation, differential expression, enrichment
+scrublet
+scikit-misc
+harmonypy
+bbknn
+celltypist
+pydeseq2
+gseapy
+
+# Interactive analysis and common exports
+jupyterlab
+ipykernel
+ipywidgets
+openpyxl
+pyarrow
+session-info2

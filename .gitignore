@@ -1,0 +1,37 @@
+# Python caches and local tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Secrets and machine-local settings
+.env
+.env.*
+*.pem
+*.key
+credentials*
+secrets*
+
+# Single-cell inputs and large binary objects
+data/
+*.h5ad
+*.h5
+*.loom
+*.mtx
+*.mtx.gz
+
+# Generated analysis outputs
+results/
+figures/
+logs/
+tmp/
+cache/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,10 @@
+library_id	group	age_months	treatment	dose_mg_kg	batch	estrous_stage	pool_mouse_ids
+Y_1	Y	4	vehicle	0	unknown	unknown	TODO
+Y_2	Y	4	vehicle	0	unknown	unknown	TODO
+Y_3	Y	4	vehicle	0	unknown	unknown	TODO
+OC_1	OC	10	vehicle	0	unknown	unknown	TODO
+OC_2	OC	10	vehicle	0	unknown	unknown	TODO
+OC_3	OC	10	vehicle	0	unknown	unknown	TODO
+OT_1	OT	10	MRJP1	200	unknown	unknown	TODO
+OT_2	OT	10	MRJP1	200	unknown	unknown	TODO
+OT_3	OT	10	MRJP1	200	unknown	unknown	TODO

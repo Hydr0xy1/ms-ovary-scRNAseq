@@ -1,0 +1,10 @@
+name: ovary_sc
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+  - defaults
+dependencies:
+  - pip
+  - python=3.12
+prefix: /root/miniconda3/envs/ovary_sc
