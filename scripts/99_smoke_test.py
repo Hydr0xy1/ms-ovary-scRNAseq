@@ -196,7 +196,7 @@ def main() -> None:
                 "OPENBLAS_NUM_THREADS": "1",
                 "MKL_NUM_THREADS": "1",
                 "NUMBA_NUM_THREADS": "1",
-                "NUMBA_THREADING_LAYER": "omp",
+                "NUMBA_THREADING_LAYER": "tbb",
                 "OVARY_ALLOW_LOW_MEMORY": "1",
             }
         )

@@ -20,9 +20,9 @@ for thread_variable in OMP_NUM_THREADS MKL_NUM_THREADS OPENBLAS_NUM_THREADS NUMB
   fi
   export "$thread_variable"
 done
-# Do not inherit AutoDL's TBB selection: the installed TBB runtime is too old
-# for Numba. OpenMP is installed and is the validated default for this project.
-export NUMBA_THREADING_LAYER="${OVARY_NUMBA_THREADING_LAYER:-omp}"
+# The project installs a current TBB runtime for Numba and PyNNDescent/BBKNN.
+# Use it explicitly instead of inheriting the older runtime from the base image.
+export NUMBA_THREADING_LAYER="${OVARY_NUMBA_THREADING_LAYER:-tbb}"
 
 cd "$project"
 printf 'Activated ovary_sc in %s\n' "$PWD"

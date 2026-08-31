@@ -7,6 +7,7 @@ scrublet
 scikit-misc
 harmonypy
 bbknn
+tbb>=2021.6
 celltypist
 pydeseq2
 gseapy

@@ -21,10 +21,10 @@ source environment/activate.sh
 
 An already valid library-specific value is preserved, so a one-command limit
 such as `OMP_NUM_THREADS=1 python scripts/99_smoke_test.py` still takes priority.
-The Numba threading backend is set to the server-tested `omp`; inherited `tbb`
-is not used because this image contains an incompatible TBB runtime. Only set
-`OVARY_NUMBA_THREADING_LAYER` if you have deliberately installed and tested a
-different backend.
+The project installs a current TBB runtime and sets Numba's threading backend to
+the server-tested `tbb`. This avoids the incompatible TBB runtime in the base
+image and matches the backend selected by PyNNDescent/BBKNN. Only set
+`OVARY_NUMBA_THREADING_LAYER` if you have deliberately tested another backend.
 
 ## Editable project installation
 

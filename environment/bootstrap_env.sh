@@ -6,7 +6,7 @@ conda=/root/miniconda3/bin/conda
 env_dir=/root/miniconda3/envs/ovary_sc
 python="$env_dir/bin/python"
 mkdir -p /root/autodl-tmp/.conda/pkgs /root/autodl-tmp/.uv-cache "$project/logs"
-export NUMBA_THREADING_LAYER=omp
+export NUMBA_THREADING_LAYER=tbb
 
 if ! test -x "$python"; then
   CONDA_PKGS_DIRS=/root/autodl-tmp/.conda/pkgs \
