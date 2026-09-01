@@ -54,7 +54,7 @@ def run_scrublet_per_library(adata: ad.AnnData, config: dict, logger) -> None:
     adata.obs["doublet_score"] = np.nan
     adata.obs["predicted_doublet"] = False
     for library_id in adata.obs["library_id"].astype(str).unique():
-        mask = adata.obs["library_id"].astype(str) == library_id
+        mask = (adata.obs["library_id"].astype(str) == library_id).to_numpy()
         subset = ad.AnnData(
             X=sparse.csr_matrix(adata.layers[counts_layer][mask, :]),
             obs=adata.obs.loc[mask, []].copy(),
