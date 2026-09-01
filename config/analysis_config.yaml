@@ -48,6 +48,18 @@ preprocess:
   n_neighbors: 15
   use_n_pcs: 40
 
+stage1_exploratory:
+  # Conservative first-pass QC agreed after threshold sensitivity review.
+  min_genes_absolute: 200
+  low_genes_n_mads: 5.0
+  mt_moderate_lower_pct: 5.0
+  mt_extreme_pct: 25.0
+  high_doublet_score_fraction: 0.01
+  n_neighbors: 15
+  use_n_pcs: 30
+  leiden_resolutions: [0.3, 0.5, 0.8]
+  primary_resolution: 0.5
+
 integration:
   primary: harmony
   batch_key: library_id

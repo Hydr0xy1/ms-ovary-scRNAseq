@@ -2,12 +2,102 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anndata as ad
 import numpy as np
 import scanpy as sc
 import scanpy.external as sce
+from scipy import sparse
 
 from .integration import harmony_integrate_compatible
 from .project import project_paths, require_compute_resources, setup_logging
+
+
+def normalize_log1p_preserving_counts(
+    adata: ad.AnnData,
+    *,
+    counts_layer: str,
+    target_sum: float,
+) -> None:
+    """Log-normalize X while leaving the raw UMI counts layer untouched."""
+    if counts_layer not in adata.layers:
+        raise KeyError(f"Required raw-count layer missing: {counts_layer}")
+    adata.layers[counts_layer] = sparse.csr_matrix(adata.layers[counts_layer])
+    adata.X = adata.layers[counts_layer].copy()
+    sc.pp.normalize_total(adata, target_sum=target_sum)
+    sc.pp.log1p(adata)
+    adata.uns["expression_semantics"] = {
+        "X": f"log1p library-size normalized expression (target_sum={target_sum:g})",
+        "counts_layer": counts_layer,
+        "counts_layer_values": "raw UMI counts",
+    }
+
+
+def select_batch_aware_hvgs(
+    adata: ad.AnnData,
+    *,
+    counts_layer: str,
+    flavor: str,
+    n_top_genes: int,
+    batch_key: str,
+) -> None:
+    """Select batch-aware HVGs from the raw counts layer without subsetting genes."""
+    sc.pp.highly_variable_genes(
+        adata,
+        layer=counts_layer,
+        flavor=flavor,
+        n_top_genes=n_top_genes,
+        batch_key=batch_key,
+        subset=False,
+    )
+
+
+def compute_hvg_pca(
+    adata: ad.AnnData,
+    *,
+    n_comps: int,
+    scale_max_value: float,
+    random_state: int,
+) -> ad.AnnData:
+    """Scale only HVGs, run PCA, and map PCA results back to the full-gene object."""
+    if "highly_variable" not in adata.var:
+        raise KeyError("HVG annotation is missing")
+    hvg_mask = adata.var["highly_variable"].to_numpy(dtype=bool)
+    if int(hvg_mask.sum()) <= n_comps:
+        raise ValueError("The number of HVGs must exceed the requested PCA components")
+    hvg = adata[:, hvg_mask].copy()
+    sc.pp.scale(hvg, max_value=scale_max_value)
+    sc.tl.pca(
+        hvg,
+        n_comps=n_comps,
+        svd_solver="arpack",
+        random_state=random_state,
+    )
+    adata.obsm["X_pca"] = hvg.obsm["X_pca"].astype(np.float32, copy=False)
+    adata.uns["pca"] = hvg.uns["pca"]
+    adata.varm["PCs"] = np.zeros((adata.n_vars, hvg.varm["PCs"].shape[1]), dtype=np.float32)
+    adata.varm["PCs"][hvg_mask, :] = hvg.varm["PCs"]
+    return hvg
+
+
+def compute_unintegrated_neighbors_umap(
+    adata: ad.AnnData,
+    *,
+    n_neighbors: int,
+    n_pcs: int,
+    random_state: int,
+    neighbors_key: str = "neighbors_unintegrated",
+) -> None:
+    """Build a PCA neighbor graph and UMAP without batch integration."""
+    sc.pp.neighbors(
+        adata,
+        n_neighbors=n_neighbors,
+        n_pcs=n_pcs,
+        use_rep="X_pca",
+        key_added=neighbors_key,
+        random_state=random_state,
+    )
+    sc.tl.umap(adata, neighbors_key=neighbors_key, random_state=random_state)
+    adata.obsm["X_umap_unintegrated"] = adata.obsm["X_umap"].copy()
 
 
 def run_preprocess_cluster(
@@ -26,45 +116,34 @@ def run_preprocess_cluster(
     seed = int(config["project"]["random_seed"])
 
     adata = sc.read_h5ad(input_path)
-    if counts_layer not in adata.layers:
-        raise KeyError(f"Required raw-count layer missing: {counts_layer}")
-    adata.X = adata.layers[counts_layer].copy()
-    sc.pp.normalize_total(adata, target_sum=float(preprocess["target_sum"]))
-    sc.pp.log1p(adata)
+    normalize_log1p_preserving_counts(
+        adata,
+        counts_layer=counts_layer,
+        target_sum=float(preprocess["target_sum"]),
+    )
     adata.raw = adata
 
-    sc.pp.highly_variable_genes(
+    select_batch_aware_hvgs(
         adata,
-        layer=counts_layer,
+        counts_layer=counts_layer,
         flavor=preprocess["hvg_flavor"],
         n_top_genes=int(preprocess["n_top_hvg"]),
         batch_key=preprocess["hvg_batch_key"],
-        subset=False,
     )
-    hvg = adata[:, adata.var["highly_variable"]].copy()
-    sc.pp.scale(hvg, max_value=float(preprocess["scale_max_value"]))
-    sc.tl.pca(
-        hvg,
+    hvg = compute_hvg_pca(
+        adata,
         n_comps=int(preprocess["n_pcs"]),
-        svd_solver="arpack",
+        scale_max_value=float(preprocess["scale_max_value"]),
         random_state=seed,
     )
-    adata.obsm["X_pca"] = hvg.obsm["X_pca"].astype(np.float32, copy=False)
-    adata.uns["pca"] = hvg.uns["pca"]
-    adata.varm["PCs"] = np.zeros((adata.n_vars, hvg.varm["PCs"].shape[1]), dtype=np.float32)
-    adata.varm["PCs"][adata.var["highly_variable"].to_numpy(), :] = hvg.varm["PCs"]
     del hvg
 
-    sc.pp.neighbors(
+    compute_unintegrated_neighbors_umap(
         adata,
         n_neighbors=int(preprocess["n_neighbors"]),
         n_pcs=int(preprocess["use_n_pcs"]),
-        use_rep="X_pca",
-        key_added="neighbors_unintegrated",
         random_state=seed,
     )
-    sc.tl.umap(adata, neighbors_key="neighbors_unintegrated", random_state=seed)
-    adata.obsm["X_umap_unintegrated"] = adata.obsm["X_umap"].copy()
 
     batch_key = config["integration"]["batch_key"]
     if integration_method == "harmony":
