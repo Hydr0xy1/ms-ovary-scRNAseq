@@ -49,25 +49,35 @@ def mark_sample_outliers(adata: ad.AnnData, config: dict) -> None:
 
 
 def run_scrublet_per_library(adata: ad.AnnData, config: dict, logger) -> None:
-    qc = config["qc"]
-    counts_layer = config["ingest"]["counts_layer"]
     adata.obs["doublet_score"] = np.nan
     adata.obs["predicted_doublet"] = False
     for library_id in adata.obs["library_id"].astype(str).unique():
         mask = (adata.obs["library_id"].astype(str) == library_id).to_numpy()
-        subset = ad.AnnData(
-            X=sparse.csr_matrix(adata.layers[counts_layer][mask, :]),
-            obs=adata.obs.loc[mask, []].copy(),
-            var=adata.var.copy(),
-        )
-        logger.info("Scrublet: %s (%d cells)", library_id, subset.n_obs)
-        sc.pp.scrublet(
-            subset,
-            expected_doublet_rate=float(qc["expected_doublet_rate"]),
-            random_state=int(config["project"]["random_seed"]),
-        )
+        logger.info("Scrublet: %s (%d cells)", library_id, int(mask.sum()))
+        subset = run_scrublet_subset(adata, mask, config)
         adata.obs.loc[mask, "doublet_score"] = subset.obs["doublet_score"].to_numpy()
         adata.obs.loc[mask, "predicted_doublet"] = subset.obs["predicted_doublet"].to_numpy()
+
+
+def run_scrublet_subset(
+    adata: ad.AnnData,
+    mask: np.ndarray | pd.Series,
+    config: dict,
+) -> ad.AnnData:
+    """Run the project's configured Scrublet call on one library subset."""
+    mask_array = np.asarray(mask, dtype=bool)
+    counts_layer = config["ingest"]["counts_layer"]
+    subset = ad.AnnData(
+        X=sparse.csr_matrix(adata.layers[counts_layer][mask_array, :]),
+        obs=adata.obs.loc[mask_array, []].copy(),
+        var=adata.var.copy(),
+    )
+    sc.pp.scrublet(
+        subset,
+        expected_doublet_rate=float(config["qc"]["expected_doublet_rate"]),
+        random_state=int(config["project"]["random_seed"]),
+    )
+    return subset
 
 
 def run_qc(

@@ -72,7 +72,10 @@ python scripts/01_build_merged.py
 # 2a. Annotate QC failures without deleting cells.
 python scripts/02_qc.py results/01_merged_counts.h5ad
 
-# Review results/02_qc_summary.tsv and figures/02_qc_before_filtering.png.
+# 2b. Diagnose mt/MAD/Scrublet sensitivity without deleting cells.
+python scripts/02_qc_sensitivity.py results/02_qc_annotated.h5ad
+
+# Review results/qc_sensitivity/QC_SENSITIVITY_REPORT.md and the diagnostic figures.
 # Only after biological review, apply the proposed filters.
 python scripts/02_qc.py results/01_merged_counts.h5ad --apply-filter
 
@@ -96,6 +99,7 @@ python scripts/06_pathway_rescue.py
 
 - `results/01_merged_counts.h5ad`
 - `results/02_qc_annotated.h5ad`
+- `results/qc_sensitivity/`
 - `results/02_qc_filtered.h5ad`
 - `results/03_clustered.h5ad`
 - `results/04_annotated.h5ad`
