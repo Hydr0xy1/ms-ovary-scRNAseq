@@ -66,6 +66,22 @@ integration:
   retain_unintegrated_graph: true
   compare_with_unintegrated: true
 
+integration_qc_review:
+  # Diagnostic triage only. None of these thresholds delete cells or clusters.
+  top_marker_n: 50
+  small_cluster_max_cells: 150
+  library_specific_fraction: 0.75
+  doublet_review:
+    metric_quantile: 0.75
+    predicted_enrichment: 1.5
+    predicted_min_fraction: 0.01
+    incompatible_min_fraction: 0.05
+  low_quality_review:
+    low_rna_quantile: 0.25
+    mt25_enrichment: 3.0
+    mt25_min_fraction: 0.05
+    low_genes_5mad_min_fraction: 0.05
+
 clustering:
   resolutions: [0.3, 0.5, 0.8, 1.0]
   primary_resolution: 0.5

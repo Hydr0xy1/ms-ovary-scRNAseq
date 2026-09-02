@@ -87,6 +87,11 @@ python scripts/02_qc.py results/01_merged_counts.h5ad --apply-filter
 # 3. Normalize, select batch-aware HVGs, compare unintegrated/Harmony, cluster.
 python scripts/03_preprocess_cluster.py results/02_qc_filtered.h5ad
 
+# 3b. Audit within-group Harmony mixing, biological structure, Leiden stability,
+# stage-1 QC candidates, small clusters, and doublet/high-mt evidence. This is
+# read-only and does not create a filtered H5AD.
+python scripts/03_integration_qc_review.py results/03_clustered.h5ad
+
 # 4. Marker-guided annotation draft; CellTypist is off by default.
 python scripts/04_annotate.py results/03_clustered.h5ad
 
