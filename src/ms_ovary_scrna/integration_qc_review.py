@@ -1048,7 +1048,6 @@ def _scatter_categorical(
     title: str,
     legend: bool,
 ) -> None:
-    order = np.arange(len(labels))
     for label in palette:
         mask = labels == label
         if mask.any():
