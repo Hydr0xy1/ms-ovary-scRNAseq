@@ -8,7 +8,9 @@ from ms_ovary_scrna.project import DEFAULT_CONFIG, load_config
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Subcluster the follicular/steroidogenic compartment without changing the atlas."
+        description=(
+            "Subcluster the follicular/steroidogenic compartment without changing the atlas."
+        )
     )
     parser.add_argument("input")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))

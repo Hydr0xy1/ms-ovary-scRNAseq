@@ -478,7 +478,9 @@ def annotation_review_table(
                 "top_20_markers": ";".join(marker_names.head(20)),
                 "top_50_markers": ";".join(marker_names.head(50)),
                 "candidate_program_1": ranked.iloc[0]["program"] if len(ranked) else "Uncertain",
-                "candidate_program_2": ranked.iloc[1]["program"] if len(ranked) > 1 else "Uncertain",
+                "candidate_program_2": (
+                    ranked.iloc[1]["program"] if len(ranked) > 1 else "Uncertain"
+                ),
                 "candidate_1_relative_score": (
                     float(ranked.iloc[0]["relative_program_score"]) if len(ranked) else math.nan
                 ),
@@ -496,7 +498,9 @@ def annotation_review_table(
                 "library_counts_json": json.dumps(
                     {
                         str(key): int(value)
-                        for key, value in frame["library_id"].astype(str).value_counts().sort_index().items()
+                        for key, value in (
+                            frame["library_id"].astype(str).value_counts().sort_index().items()
+                        )
                     },
                     sort_keys=True,
                 ),
@@ -725,7 +729,9 @@ def plot_marker_dotplot(
     y = marker_evidence["cluster"].map(cluster_y).to_numpy()
     sizes = 3 + 90 * marker_evidence["fraction_expressing"].to_numpy()
     colors = marker_evidence["mean_log_normalized_expression"].to_numpy()
-    figure, axis = plt.subplots(figsize=(max(13, len(marker_order) * 0.27), max(5, len(clusters) * 0.45)))
+    figure, axis = plt.subplots(
+        figsize=(max(13, len(marker_order) * 0.27), max(5, len(clusters) * 0.45))
+    )
     plot = axis.scatter(x, y, s=sizes, c=colors, cmap="viridis", linewidths=0)
     axis.set_xticks(range(len(marker_order)), marker_order, rotation=90)
     axis.set_yticks(range(len(clusters)), clusters)
