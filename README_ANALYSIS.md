@@ -95,8 +95,16 @@ python scripts/03_integration_qc_review.py results/03_clustered.h5ad
 # 4. Marker-guided annotation draft; CellTypist is off by default.
 python scripts/04_annotate.py results/03_clustered.h5ad
 
-# Review marker tables, fill metadata/cluster_labels.tsv, then rerun stage 4.
-python scripts/04_annotate.py results/03_clustered.h5ad --run-celltypist
+# 4b. Curate the first major/broad ovarian lineage layer. This reuses the
+# existing marker table, writes results/annotation and figures/annotation, and
+# atomically adds cell_type_broad, cell_state_provisional and
+# annotation_confidence to results/04_annotated.h5ad. It does not subcluster or
+# run group comparisons.
+python scripts/04_broad_annotation_review.py results/04_annotated.h5ad
+
+# CellTypist remains optional and immune-only. Do not use the bundled immune
+# model to overwrite whole-ovary broad labels.
+# python scripts/04_annotate.py results/03_clustered.h5ad --run-celltypist
 
 # 5. Sample-level pseudobulk DE and gene rescue classification.
 python scripts/05_pseudobulk_de.py results/04_annotated.h5ad
@@ -115,6 +123,8 @@ python scripts/06_pathway_rescue.py
 - `results/02_qc_filtered.h5ad`
 - `results/03_clustered.h5ad`
 - `results/04_annotated.h5ad`
+- `results/annotation/`
+- `figures/annotation/`
 - `results/05_pseudobulk/`
 - `results/06_pathways/`
 

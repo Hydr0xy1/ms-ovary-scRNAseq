@@ -1,0 +1,27 @@
+cluster	candidate_1	candidate_2	cell_type_broad	cell_state_provisional	annotation_confidence	doublet_concern	qc_concern	annotation_rationale
+0	Stromal_fibroblast	Smooth_muscle_pericyte	Stromal_fibroblast	None	High	False	False	Pdgfra/Dcn及基质程序共同支持，缺少免疫、内皮和上皮程序。
+1	Stromal_fibroblast	Vascular_endothelial	Stromal_fibroblast	None	High	False	False	Dcn/Lum/Col1a1/Col1a2/Bgn等成纤维细胞标志一致富集。
+2	Stromal_fibroblast	Smooth_muscle_pericyte	Stromal_fibroblast	None	High	False	False	Col1a2/Ogn及基质相关基因支持，未见其他major lineage冲突。
+3	Granulosa	Theca_steroidogenic	Granulosa	None	High	False	False	Kitl/Amh/Amhr2及颗粒细胞程序共同支持。
+4	Theca_steroidogenic	Luteal_candidate	Theca_steroidogenic	None	High	False	False	Aldh1a1/Hsd3b1/Cyp11a1/Fdx1/Lhcgr构成一致类固醇生成程序。
+5	Granulosa	Theca_steroidogenic	Granulosa	None	High	False	False	Inha/Inhbb/Hsd17b1/Gja1/Esr2共同支持颗粒细胞。
+6	Theca_steroidogenic	Granulosa	Uncertain	None	Uncertain	False	True	低RNA复杂度且Inha/Hsd17b1与Hsd3b1/Fdx1/Cyp11a1并存，major identity暂不强定。
+7	Granulosa	Theca_steroidogenic	Granulosa	None	Medium	False	False	Gja1/Esr2/Bmpr1b支持颗粒细胞，但经典标志强度弱于主要颗粒细胞群。
+8	Immune	Lymphatic_endothelial	Immune	None	High	False	False	Ptprc/Tyrobp/Fcer1g/Lyz2/Spi1及抗原呈递程序一致支持免疫细胞。
+9	Theca_steroidogenic	Luteal_candidate	Theca_steroidogenic	None	High	False	False	Fdx1/Cyp11a1/Mrap/Scarb1与类固醇生成程序明确。
+10	Ovarian_epithelial	Ciliated_epithelial	Ovarian_epithelial	None	High	False	False	Plet1/Ovgp1/Epcam/Krt8/Krt18/Krt19共同支持卵巢上皮。
+11	Immune	Granulosa	Immune	None	High	False	False	Ptprc、T细胞受体相关基因及泛免疫程序一致。
+12	Granulosa	Theca_steroidogenic	Granulosa	None	Medium	False	True	Bmpr1b/Esr2及整体颗粒细胞程序支持，但经典标志较稀疏且mt偏高。
+13	Granulosa	Theca_steroidogenic	Granulosa	Cycling	Medium	False	False	去除细胞周期基因后Inha/Hsd17b1/Fst等仍支持增殖中的颗粒细胞。
+14	Smooth_muscle_pericyte	Stromal_fibroblast	Smooth_muscle_pericyte	None	High	False	False	Myh11/Tagln/Acta2/Cnn1构成一致收缩性平滑肌程序。
+15	Stromal_fibroblast	Smooth_muscle_pericyte	Stromal_fibroblast	None	High	False	False	Col1a1/Col1a2/Col3a1及细胞外基质程序明确。
+16	Smooth_muscle_pericyte	Stromal_fibroblast	Smooth_muscle_pericyte	None	High	False	False	Notch3/Rgs5/Pdgfrb并伴Myh11/Acta2，支持周细胞/血管平滑肌major lineage。
+17	Ovarian_epithelial	Ciliated_epithelial	Ovarian_epithelial	None	High	False	True	Plet1/Ovgp1/Epcam与角蛋白程序一致；RNA较低但lineage清楚。
+18	Vascular_endothelial	Lymphatic_endothelial	Vascular_endothelial	None	High	False	False	Pecam1/Cdh5/Flt1/Emcn/Esam/Kdr共同支持血管内皮。
+19	Ovarian_epithelial	Stromal_fibroblast	Ovarian_epithelial	None	High	False	False	Upk1b/Upk3b/Krt19/Wt1/Muc16支持卵巢表面或间皮样上皮。
+20	Ciliated_epithelial	Ovarian_epithelial	Ciliated_epithelial	None	High	False	False	Foxj1/Tppp3/Ccdc153/Tmem212及多种纤毛相关基因高度一致。
+21	Immune	Ovarian_epithelial	Immune	None	High	False	False	Cd74/Cd79a/Bank1/Igkc/Cd37与泛免疫程序共同支持B lineage所属的major immune类群。
+22	Lymphatic_endothelial	Vascular_endothelial	Lymphatic_endothelial	None	High	False	False	Prox1/Ccl21a/Mmrn1/Flt4伴内皮标志，明确支持淋巴管内皮。
+23	Ovarian_epithelial	Ciliated_epithelial	Ovarian_epithelial	None	High	False	False	Epcam/Krt8/Krt19/Plet1/Wfdc2及紧密连接程序一致支持上皮。
+24	Theca_steroidogenic	Granulosa	Theca_steroidogenic	Cycling	Low	True	False	去除周期基因后Mrap/Fdx1/Mgarp/Me1/Prlr仍支持cycling steroidogenic来源，但高复杂度与Scrublet证据要求保留doublet警示。
+25	Luteal_candidate	Theca_steroidogenic	Luteal_candidate	None	Low	False	False	Star/Cyp11a1/Scarb1并伴Ptgfr/Sfrp4更偏luteal候选，但仅16个细胞故保持低置信度。

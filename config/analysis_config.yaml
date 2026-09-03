@@ -96,6 +96,22 @@ annotation:
   provisional_confidence: 0.5
   uncertain_confidence: 0.2
 
+broad_annotation_review:
+  # Cluster-level major-lineage curation only; no subclustering or group comparison.
+  cluster_key: leiden_0.5
+  marker_section: major_annotation
+  mapping_file: metadata/broad_cluster_annotation.tsv
+  output_dir: results/annotation
+  figure_dir: figures/annotation
+  top_marker_file: results/04_cluster_top_markers.tsv
+  integration_review_file: results/integration_qc_review/cluster_marker_review.tsv
+  cell_cycle_genes:
+    [Mki67, Top2a, Cenpf, Cdc20, Tpx2, Cenpa, Ube2c, Cenpe, Cdca8, Cks2,
+     Prc1, Hmmr, Ckap2l, Bub1b, Ccnb1, Racgap1, Ect2, Anln, Cep55, Diaph3,
+     Aspm, Kif23, Knstrn, Ccnb2, Tacc3, Dlgap5, Smc4, Kif11, Rrm2, Ccna2,
+     Bub1, Ncapd2, Stmn1, Birc5, Cdk1, Cks1b, Smc2, Knl1, Incenp, Pbk,
+     Kif22, Aurka, Plk1, Nusap1]
+
 pseudobulk:
   sample_key: library_id
   group_key: group

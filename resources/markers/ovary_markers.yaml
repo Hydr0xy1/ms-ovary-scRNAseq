@@ -52,3 +52,45 @@ granulosa_states:
     positive: [Lhcgr, Star, Cyp11a1, Hsd3b1, Pgr]
   Atretic_stress:
     positive: [Bax, Casp3, Ddit3, Atf4, Jun, Fos]
+
+# Expanded major-lineage panel used by the formal broad-annotation review.
+# The legacy ``broad`` section above is kept unchanged so earlier integration
+# diagnostics remain exactly reproducible.
+major_annotation:
+  Granulosa:
+    positive: [Foxl2, Amh, Inha, Inhbb, Fshr, Hsd17b1, Gja1, Kitl]
+    exclude: [Ptprc, Pecam1, Cdh5, Col1a1, Dcn, Krt19, Epcam]
+  Theca_steroidogenic:
+    positive: [Cyp17a1, Cyp11a1, Hsd3b1, Star, Srd5a1, Fdx1, Aldh1a1, Lhcgr]
+    exclude: [Ptprc, Pecam1, Cdh5, Epcam, Krt19]
+  Stromal_fibroblast:
+    positive: [Dcn, Lum, Col1a1, Col1a2, Ogn, Bgn, Pdgfra, Tcf21]
+    exclude: [Ptprc, Pecam1, Cdh5, Epcam, Krt19]
+  Smooth_muscle_pericyte:
+    positive: [Rgs5, Pdgfrb, Cspg4, Notch3, Acta2, Tagln, Myh11]
+    exclude: [Ptprc, Pecam1, Cdh5, Epcam]
+  Vascular_endothelial:
+    positive: [Pecam1, Cdh5, Kdr, Flt1, Emcn, Esam]
+    exclude: [Ptprc, Col1a1, Col1a2, Epcam, Krt19]
+  Lymphatic_endothelial:
+    positive: [Prox1, Lyve1, Pdpn, Ccl21a, Mmrn1, Flt4]
+    exclude: [Ptprc, Col1a1, Epcam, Krt19]
+  Ovarian_epithelial:
+    positive: [Epcam, Krt8, Krt18, Krt19, Plet1, Upk1b, Upk3b, Ovgp1]
+    exclude: [Ptprc, Pecam1, Cdh5, Col1a1]
+  Ciliated_epithelial:
+    positive: [Foxj1, Pifo, Tppp3, Ccdc153, Tmem212, Rsph1, Dnah5]
+    exclude: [Ptprc, Pecam1, Col1a1]
+  Immune:
+    positive: [Ptprc, Tyrobp, Lyz2, Fcer1g, C1qa, C1qb, C1qc, Spi1, Cd3d, Cd3e,
+               Cd3g, Nkg7, Trbc1, Trbc2, Cd74, Cd79a, Ms4a1, Cd37, Bank1, Igkc]
+    exclude: [Pecam1, Cdh5, Col1a1, Cyp11a1, Epcam, Krt19]
+  Oocyte:
+    positive: [Ddx4, Zp3, Zp2, Gdf9, Nobox, Ooep, Figla, Dazl]
+    exclude: [Ptprc, Pecam1, Col1a1, Epcam]
+  Luteal_candidate:
+    positive: [Ptgfr, Lhcgr, Sfrp4, Star, Cyp11a1, Scarb1]
+    exclude: [Ptprc, Pecam1, Epcam]
+  Erythroid:
+    positive: [Alas2, Hba-a1, Hba-a2, Hbb-bs, Hbb-bt]
+    exclude: [Ptprc, Pecam1, Col1a1, Epcam]
