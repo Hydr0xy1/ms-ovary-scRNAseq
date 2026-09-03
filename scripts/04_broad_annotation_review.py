@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 
 from ms_ovary_scrna.broad_annotation import run_broad_annotation_review
-
 from ms_ovary_scrna.project import DEFAULT_CONFIG, load_config
 
 

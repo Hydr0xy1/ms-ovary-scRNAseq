@@ -4,6 +4,8 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
+
 from ms_ovary_scrna.broad_annotation import (
     cluster24_lineage_comparison,
     cluster_marker_evidence,
@@ -11,7 +13,6 @@ from ms_ovary_scrna.broad_annotation import (
     noncycling_marker_table,
     read_cluster_mapping,
 )
-from scipy import sparse
 
 
 def _adata() -> ad.AnnData:
