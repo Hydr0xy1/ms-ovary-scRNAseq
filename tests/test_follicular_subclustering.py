@@ -82,7 +82,7 @@ def test_build_subset_preserves_counts_metadata_and_removes_atlas_embedding() ->
     ]
     assert sparse.isspmatrix_csr(subset.layers["counts"])
     assert not subset.obsm
-    assert "neighbors" not in subset.uns
+    assert not subset.uns
     np.testing.assert_array_equal(source.layers["counts"].toarray(), original_counts.toarray())
 
 

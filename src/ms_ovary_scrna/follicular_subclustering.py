@@ -76,9 +76,7 @@ def build_follicular_subset(
         del subset.obsp[key]
     for key in list(subset.varm.keys()):
         del subset.varm[key]
-    for key in list(subset.uns.keys()):
-        if key.startswith(("neighbors", "pca", "umap", "leiden", "rank_genes_groups")):
-            del subset.uns[key]
+    subset.uns.clear()
     return subset
 
 
