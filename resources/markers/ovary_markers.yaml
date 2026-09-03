@@ -94,3 +94,25 @@ major_annotation:
   Erythroid:
     positive: [Alas2, Hba-a1, Hba-a2, Hbb-bs, Hbb-bt]
     exclude: [Ptprc, Pecam1, Col1a1, Epcam]
+
+# Local marker programs for the first follicular/steroidogenic subclustering pass.
+# Candidate names are deliberately conservative and do not encode condition effects.
+follicular_subclustering:
+  Granulosa_identity:
+    positive: [Foxl2, Amh, Inha, Inhbb, Fshr, Gja1, Hsd17b1]
+  Granulosa_preantral:
+    positive: [Igfbp5, Gatm, Foxl2, Amh, Inha]
+  Granulosa_antral:
+    positive: [Inhbb, Fshr, Hsd17b1, Inha, Gja1]
+  Granulosa_mitotic:
+    positive: [Top2a, Racgap1, Mki67, Cenpf, Cdc20, Ube2c]
+  Granulosa_atretic:
+    positive: [Pik3ip1, Itih5, Ghr, Foxl2, Inha]
+  Granulosa_luteinizing:
+    positive: [Foxl2, Inha, Inhbb, Lhcgr, Star, Cyp11a1, Ptgfr, Sfrp4]
+  Theca_steroidogenic:
+    positive: [Cyp17a1, Cyp11a1, Hsd3b1, Star, Fdx1, Mrap, Mgarp, Srd5a1, Lhcgr, Prlr]
+  Luteal_identity:
+    positive: [Ptgfr, Lhcgr, Sfrp4, Star, Cyp11a1, Scarb1]
+  Stress:
+    positive: [Fos, Jun, Junb, Ddit3, Atf4, Hspa1a, Hspa1b]

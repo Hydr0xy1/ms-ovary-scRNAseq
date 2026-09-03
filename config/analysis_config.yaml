@@ -112,6 +112,35 @@ broad_annotation_review:
      Bub1, Ncapd2, Stmn1, Birc5, Cdk1, Cks1b, Smc2, Knl1, Incenp, Pbk,
      Kif22, Aurka, Plk1, Nusap1]
 
+follicular_subclustering:
+  # Local follicular/steroidogenic analysis only; the whole-ovary object is read-only.
+  source_cluster_key: leiden_0.5
+  source_clusters: ["3", "5", "7", "12", "13", "4", "9", "24", "6", "25"]
+  counts_layer: counts
+  output_dir: results/subclustering
+  figure_dir: figures/subclustering
+  n_top_hvg: 3000
+  hvg_flavor: seurat_v3
+  hvg_batch_key: library_id
+  n_pcs: 50
+  neighbor_pc_candidates: [30, 40]
+  use_n_pcs: 40
+  n_neighbors: 15
+  resolutions: [0.2, 0.3, 0.5, 0.8]
+  primary_resolution: 0.5
+  marker_top_n: 100
+  cell_cycle_genes:
+    s_phase: [Mcm5, Pcna, Tyms, Fen1, Mcm2, Mcm4, Rrm1, Ung, Gins2, Mcm6,
+              Cdca7, Dtl, Prim1, Uhrf1, Mlf1ip, Hells, Rfc2, Rpa2, Nasp, Rad51ap1,
+              Gmnn, Wdr76, Slbp, Ccne2, Ubr7, Pold3, Msh2, Atad2, Rad51, Rrm2,
+              Cdc45, Cdc6, Exo1, Tipin, Dscc1, Blm, Casp8ap2, Usp1, Clspn, Pola1,
+              Chaf1b, Brip1, E2f8]
+    g2m_phase: [Hmgb2, Cdk1, Nusap1, Ube2c, Birc5, Tpx2, Top2a, Ndc80, Cks2,
+                Nuf2, Cks1b, Mki67, Tmpo, Cenpf, Tacc3, Fam64a, Smc4, Ccnb2,
+                Ckap2l, Ckap2, Aurkb, Bub1, Kif11, Anp32e, Tubb4b, Gtse1, Kif20b,
+                Hjurp, Cdca3, Hn1, Cdc20, Ttk, Cdc25c, Kif2c, Rangap1, Ncapd2,
+                Dlgap5, Cdca2, Cdca8, Ect2, Kif23, Hmmr, Aurka, Psf3]
+
 pseudobulk:
   sample_key: library_id
   group_key: group

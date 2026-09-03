@@ -102,6 +102,10 @@ python scripts/04_annotate.py results/03_clustered.h5ad
 # run group comparisons.
 python scripts/04_broad_annotation_review.py results/04_annotated.h5ad
 
+# 4c. Recompute HVGs/PCA/Harmony and multi-resolution clusters only within the
+# follicular/steroidogenic compartment. The whole-ovary object remains read-only.
+python scripts/04_follicular_subclustering.py results/04_annotated.h5ad
+
 # CellTypist remains optional and immune-only. Do not use the bundled immune
 # model to overwrite whole-ovary broad labels.
 # python scripts/04_annotate.py results/03_clustered.h5ad --run-celltypist
