@@ -11,6 +11,7 @@ from ms_ovary_scrna.follicular_subclustering import (
     origin_neighborhood_summary,
     resolution_key,
     resolution_tables,
+    resolution_transition_table,
     subset_inventory,
 )
 
@@ -113,6 +114,26 @@ def test_resolution_table_reports_all_three_composition_dimensions() -> None:
         "library_id",
         "group",
     }
+
+
+def test_resolution_transition_table_quantifies_adjacent_splits() -> None:
+    subset = build_follicular_subset(
+        _adata(),
+        source_cluster_key="leiden_0.5",
+        source_clusters=["3", "6", "24", "25"],
+        counts_layer="counts",
+    )
+    subset.obs[resolution_key(0.2)] = pd.Categorical(["0", "0", "0", "1", "1"])
+    subset.obs[resolution_key(0.5)] = pd.Categorical(["0", "0", "1", "2", "2"])
+    table = resolution_transition_table(subset.obs, [0.2, 0.5])
+
+    parent_zero = table[table["from_cluster"] == "0"].set_index("to_cluster")
+    assert parent_zero.loc["0", "n_cells"] == 2
+    assert parent_zero.loc["1", "n_cells"] == 1
+    assert parent_zero.loc["0", "pct_from_cluster"] == pytest.approx(200 / 3)
+    assert parent_zero.loc["0", "n_destinations_from_cluster"] == 2
+    assert bool(parent_zero.loc["0", "is_dominant_destination"])
+    assert table["n_cells"].sum() == subset.n_obs
 
 
 def test_marker_program_tables_keep_multi_marker_evidence() -> None:

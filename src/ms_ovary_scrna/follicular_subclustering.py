@@ -314,6 +314,63 @@ def resolution_tables(
     return pd.DataFrame(summary), pd.DataFrame(composition)
 
 
+def resolution_transition_table(
+    obs: pd.DataFrame,
+    resolutions: list[float],
+) -> pd.DataFrame:
+    """Describe how cells split between every pair of adjacent resolutions."""
+    columns = [
+        "from_resolution",
+        "to_resolution",
+        "from_cluster",
+        "to_cluster",
+        "n_cells",
+        "from_cluster_n_cells",
+        "to_cluster_n_cells",
+        "pct_from_cluster",
+        "pct_to_cluster",
+        "n_destinations_from_cluster",
+        "dominant_destination_fraction",
+        "is_dominant_destination",
+    ]
+    records: list[dict[str, Any]] = []
+    for from_resolution, to_resolution in zip(resolutions[:-1], resolutions[1:], strict=True):
+        from_key = resolution_key(from_resolution)
+        to_key = resolution_key(to_resolution)
+        pair_counts = (
+            obs.groupby([from_key, to_key], observed=True, sort=True)
+            .size()
+            .rename("n_cells")
+            .reset_index()
+        )
+        from_sizes = pair_counts.groupby(from_key, observed=True)["n_cells"].transform("sum")
+        to_sizes = pair_counts.groupby(to_key, observed=True)["n_cells"].transform("sum")
+        n_destinations = pair_counts.groupby(from_key, observed=True)[to_key].transform("nunique")
+        dominant_counts = pair_counts.groupby(from_key, observed=True)["n_cells"].transform("max")
+        for index, row in pair_counts.iterrows():
+            records.append(
+                {
+                    "from_resolution": from_resolution,
+                    "to_resolution": to_resolution,
+                    "from_cluster": str(row[from_key]),
+                    "to_cluster": str(row[to_key]),
+                    "n_cells": int(row["n_cells"]),
+                    "from_cluster_n_cells": int(from_sizes.iloc[index]),
+                    "to_cluster_n_cells": int(to_sizes.iloc[index]),
+                    "pct_from_cluster": 100.0 * float(row["n_cells"] / from_sizes.iloc[index]),
+                    "pct_to_cluster": 100.0 * float(row["n_cells"] / to_sizes.iloc[index]),
+                    "n_destinations_from_cluster": int(n_destinations.iloc[index]),
+                    "dominant_destination_fraction": float(
+                        dominant_counts.iloc[index] / from_sizes.iloc[index]
+                    ),
+                    "is_dominant_destination": bool(
+                        row["n_cells"] == dominant_counts.iloc[index]
+                    ),
+                }
+            )
+    return pd.DataFrame(records, columns=columns)
+
+
 def exploratory_markers(
     adata: ad.AnnData,
     *,
@@ -825,7 +882,13 @@ def run_follicular_subclustering(
     )
     s_genes = [str(gene) for gene in settings["cell_cycle_genes"]["s_phase"]]
     g2m_genes = [str(gene) for gene in settings["cell_cycle_genes"]["g2m_phase"]]
-    cell_cycle = set(s_genes + g2m_genes)
+    review_cell_cycle = [
+        str(gene)
+        for gene in config.get("broad_annotation_review", {}).get("cell_cycle_genes", [])
+    ]
+    # Use the union of the standard S/G2M lists and the broader ovarian review
+    # list so cluster-24 markers such as Cenpa, Prc1 and Ccnb1 are recognized.
+    cell_cycle = set(s_genes + g2m_genes + review_cell_cycle)
     hvg_table, hvg_summary = hvg_diagnostics(subset, cell_cycle_genes=cell_cycle)
 
     logger.info("Computing 50 subset-specific PCs")
@@ -913,6 +976,7 @@ def run_follicular_subclustering(
         random_state=seed,
     )
     resolution_summary, resolution_composition = resolution_tables(subset.obs, resolutions)
+    resolution_transitions = resolution_transition_table(subset.obs, resolutions)
     markers = exploratory_markers(
         subset,
         resolutions=resolutions,
@@ -958,6 +1022,7 @@ def run_follicular_subclustering(
         "follicular_neighbor_mixing.tsv": pd.concat(mixing_tables, ignore_index=True),
         "follicular_resolution_summary.tsv": resolution_summary,
         "follicular_resolution_composition.tsv": resolution_composition,
+        "follicular_resolution_transitions.tsv": resolution_transitions,
         "follicular_cluster_markers.tsv": markers,
         "follicular_origin_markers.tsv": source_markers,
         "follicular_marker_evidence.tsv": marker_evidence,

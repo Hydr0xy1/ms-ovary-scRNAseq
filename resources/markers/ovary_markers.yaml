@@ -98,6 +98,9 @@ major_annotation:
 # Local marker programs for the first follicular/steroidogenic subclustering pass.
 # Candidate names are deliberately conservative and do not encode condition effects.
 follicular_subclustering:
+  Germ_oocyte:
+    positive: [Ddx4, Zp2, Zp3, Gdf9, Nobox, Ooep, Figla, Dazl, Mov10l1,
+               Lhx8, Mael, Gtsf1, Dppa3]
   Granulosa_identity:
     positive: [Foxl2, Amh, Inha, Inhbb, Fshr, Gja1, Hsd17b1]
   Granulosa_preantral:
