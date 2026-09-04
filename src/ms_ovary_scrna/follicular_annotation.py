@@ -762,7 +762,9 @@ def _plot_cluster8_review(adata: ad.AnnData, cluster8: pd.DataFrame, output: Pat
     axes[1].scatter(coords[:, 0], coords[:, 1], s=1, color="#d9d9d9", linewidths=0)
     support = cluster8["heterotypic_doublet_supported"].to_numpy()
     selected = mask.copy()
-    selected[mask] = support
+    # ``support`` is indexed over all cells; assign only the cluster-8 slice
+    # to the corresponding subset of the full UMAP mask.
+    selected[mask] = support[mask]
     axes[1].scatter(
         coords[selected, 0],
         coords[selected, 1],
