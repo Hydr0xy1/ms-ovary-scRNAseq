@@ -164,6 +164,19 @@ annotation_consolidation:
   global_cluster_key: leiden_0.5
   local_cluster_key: follicular_leiden
 
+downstream:
+  # Subset-specific exploratory settings. These do not alter the full atlas.
+  subclustering:
+    hvg_flavor: seurat_v3
+    n_top_hvg: 3000
+    hvg_batch_key: library_id
+    n_pcs: 50
+    use_n_pcs: 40
+    n_neighbors: 15
+    resolutions: [0.2, 0.3, 0.5, 0.8]
+    primary_resolution: 0.5
+    marker_top_n: 100
+
 pseudobulk:
   sample_key: library_id
   group_key: group

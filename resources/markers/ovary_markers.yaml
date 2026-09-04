@@ -143,3 +143,39 @@ follicular_annotation_review:
     positive: [Ptprc, Tyrobp, Lyz2, Fcer1g]
   oocyte:
     positive: [Ddx4, Gdf9, Nobox, Ooep, Figla, Zp2, Zp3, Mov10l1, Mael, Lhx8, Kit, Sohlh1, Sohlh2]
+
+# Marker panels for conservative compartment subclustering. These are identity
+# candidates only; they are not used to infer treatment or aging effects.
+compartment_subclustering:
+  stromal:
+    fibroblast: [Dcn, Lum, Col1a1, Col1a2, Ogn, Bgn, Pdgfra, Tcf21, Col3a1, Dpt]
+    ecm_fibrotic: [Col1a1, Col1a2, Col3a1, Fn1, Postn, Sparc, Sparcl1, Ctgf, Timp1, Mmp2, Mmp14]
+    myofibroblast: [Acta2, Tagln, Ctgf, Postn, Col1a1]
+    pericyte: [Rgs5, Pdgfrb, Cspg4, Notch3, Des, Rbp1]
+    smooth_muscle: [Acta2, Tagln, Myh11, Des, Cnn1]
+    vascular_associated: [Rgs5, Pdgfrb, Cspg4, Pecam1, Cdh5, Kdr]
+    theca_adjacent: [Cyp11a1, Cyp17a1, Hsd3b1, Star, Fdx1]
+    endothelial: [Pecam1, Cdh5, Kdr, Flt1, Esam, Emcn]
+    lymphatic: [Prox1, Lyve1, Pdpn, Ccl21a, Flt4, Mmrn1]
+  immune:
+    macrophage_c1qc: [C1qa, C1qb, C1qc, Adgre1, Fcgr1, Mertk, Cd68]
+    macrophage_inflammatory: [Lgals3, Spp1, Il1b, Tnf, Nfkbia, Lyz2]
+    macrophage_lipid: [Lpl, Apoe, Fabp5, Ctsb, Ctsd, Trem2]
+    monocyte: [Ly6c2, Ccr2, S100a8, S100a9, Plac8, Lyz2]
+    dendritic: [Itgax, Flt3, Clec10a, Xcr1, Clec9a, Cd74]
+    t_cell: [Cd3d, Cd3e, Cd3g, Trbc1, Trbc2, Lck]
+    nk: [Nkg7, Klrk1, Klrb1c, Prf1, Gzmb, Ccl5]
+    b_cell: [Cd79a, Ms4a1, Cd74, Cd37, Bank1, Cd22, Igkc]
+    plasma: [Jchain, Mzb1, Sdc1, Derl3, Igha, Igkc]
+    neutrophil: [S100a8, S100a9, Ly6g, Csf3r, Retnlg]
+    mast: [Kit, Ms4a2, Cpa3, Mcpt4, Tpsb2]
+  epithelial:
+    ciliated: [Foxj1, Pifo, Tppp3, Tmem212, Ccdc153, Rfx2, Rfx3, Dnah5]
+    surface: [Epcam, Krt8, Krt18, Krt19, Plet1, Upk1b, Upk3b]
+    secretory: [Epcam, Krt8, Krt18, Ovgp1, Muc1, Krt19]
+  endothelial:
+    lymphatic: [Prox1, Lyve1, Pdpn, Ccl21a, Flt4, Mmrn1]
+    arterial: [Efnb2, Sox17, Gja5, Flt1, Kdr]
+    venous: [Nr2f2, Ackr1, Vwf, Cdh5, Pecam1]
+    capillary: [Rgcc, Car4, Emcn, Kdr, Pecam1]
+    vascular: [Pecam1, Cdh5, Kdr, Flt1, Esam, Emcn]
