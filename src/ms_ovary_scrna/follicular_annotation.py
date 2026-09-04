@@ -465,7 +465,11 @@ def cluster6_comparison(adata: ad.AnnData, scores: pd.DataFrame) -> pd.DataFrame
         "antral_reference": ["7"],
         "atretic_reference": ["0", "5"],
     }
-    frame = adata.obs.join(scores)
+    # ``_apply_cell_labels`` may already have attached these score columns to
+    # ``adata.obs``.  Drop overlapping names before the index-aligned join so
+    # reruns remain idempotent and pandas does not raise a duplicate-column
+    # error.
+    frame = adata.obs.drop(columns=scores.columns, errors="ignore").join(scores)
     rows: list[dict[str, Any]] = []
     for name, clusters in groups.items():
         mask = frame["follicular_leiden"].astype(str).isin(clusters)
