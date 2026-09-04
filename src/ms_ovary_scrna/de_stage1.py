@@ -122,6 +122,11 @@ def load_broad_inputs(config: dict[str, Any]) -> dict[str, pd.DataFrame | str]:
 
     readiness_report = root / "PSEUDOBULK_READINESS_REPORT.md"
     source_note = readiness_report.read_text(encoding="utf-8") if readiness_report.exists() else ""
+    if "Tier1" not in source_note or "counts" not in source_note:
+        raise ValueError(
+            "PSEUDOBULK_READINESS_REPORT.md does not verify Tier1 raw-count aggregation; "
+            "refusing to run DE without source confirmation"
+        )
     return {
         "counts": counts,
         "metadata": metadata,
@@ -352,6 +357,7 @@ def _run_one_deseq(
         "padj_na": int(result["padj"].isna().sum()),
         "shrink_failed": shrink_failed,
         "shrink_warning": shrink_warning,
+        "runtime_warnings": "",
         "pca_outlier_candidate": bool(pca_outlier),
         "normalized": normalized,
     }
@@ -518,10 +524,14 @@ def run_de_stage1(config: dict[str, Any], *, allow_low_memory: bool = False) -> 
         pop_counts = counts.loc[population].reindex(libraries)
         pop_meta = metadata[metadata["population"].astype(str) == population].set_index("library").reindex(libraries)
         try:
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                result, diagnostics, pca, normalized = _run_one_deseq(
-                    pop_counts, pop_meta, spec, alpha=alpha, n_cpus=n_cpus
-                )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    result, diagnostics, pca, normalized = _run_one_deseq(
+                        pop_counts, pop_meta, spec, alpha=alpha, n_cpus=n_cpus
+                    )
+                warning_messages = sorted({f"{w.category.__name__}: {w.message}" for w in caught})
+            diagnostics["runtime_warnings"] = "; ".join(warning_messages)
             pop_dir = out_dir / safe_name(population)
             pop_dir.mkdir(parents=True, exist_ok=True)
             result.to_csv(pop_dir / f"{spec.name}.tsv.gz", sep="\t", index=False, compression="gzip")
@@ -555,7 +565,9 @@ def run_de_stage1(config: dict[str, Any], *, allow_low_memory: bool = False) -> 
                     "lfc_sign_agreement": sign_agree,
                     "median_abs_lfc_shrinkage_delta": median_delta,
                     "replicate_consistency_concern": bool(consistency["replicate_consistency_concern"].any()) if not consistency.empty else True,
-                    "warnings": diagnostics["shrink_warning"] or "None",
+                    "warnings": "; ".join(
+                        value for value in [diagnostics["runtime_warnings"], diagnostics["shrink_warning"]] if value
+                    ) or "None",
                 }
             )
             logger.info("DE complete: %s %s (%d genes)", population, spec.name, len(result))
