@@ -764,13 +764,18 @@ def _map_compartment_labels(main: ad.AnnData, subset_path: Path, kind: str) -> N
         subtype_col = f"{kind}_subtype_v1"
         state_col = f"{kind}_state_v1"
         conf_col = f"{kind}_confidence_v1"
+        source_subtypes = subset.obs.iloc[sub_position]["source_cell_type_subtype_v1"].astype(str)
         for source_col, target_col in (
             (subtype_col, "cell_type_subtype_v2"),
             (state_col, "cell_state_v2"),
             (conf_col, "annotation_confidence_v2"),
         ):
             values = subset.obs.iloc[sub_position][source_col].astype(str).to_numpy()
-            accepted = values != "Uncertain"
+            # Mixed-lineage cells are reviewed diagnostically but never allowed
+            # to overwrite the audited uncertain/mixed label in v2.
+            accepted = (values != "Uncertain") & ~source_subtypes.str.contains(
+                "Mixed_lineage", regex=False
+            ).to_numpy()
             target = main.obs[target_col].astype(str).to_numpy()
             target[position[accepted]] = values[accepted]
             main.obs[target_col] = target
@@ -789,7 +794,9 @@ def _map_compartment_labels(main: ad.AnnData, subset_path: Path, kind: str) -> N
         else:
             broad = main.obs.iloc[position]["cell_type_broad_v1"].astype(str).to_numpy()
         target = main.obs["cell_type_broad_v2"].astype(str).to_numpy()
-        accepted = subset.obs.iloc[sub_position][subtype_col].astype(str).to_numpy() != "Uncertain"
+        accepted = (
+            subset.obs.iloc[sub_position][subtype_col].astype(str).to_numpy() != "Uncertain"
+        ) & ~source_subtypes.str.contains("Mixed_lineage", regex=False).to_numpy()
         target[position[accepted]] = broad[accepted]
         main.obs["cell_type_broad_v2"] = target
         source_col = "compartment"
