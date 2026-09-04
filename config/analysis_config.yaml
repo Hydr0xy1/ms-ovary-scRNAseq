@@ -152,6 +152,18 @@ follicular_annotation_review:
   within_library_high_qc_quantile: 0.50
   evidence_top_n: 30
 
+annotation_consolidation:
+  # Consolidate already-reviewed labels into a new main object only.
+  input_object: results/04_annotated.h5ad
+  local_object: results/subclustering/follicular_steroidogenic_annotated.h5ad
+  local_cell_labels: results/subclustering/follicular_cell_labels.tsv
+  cluster8_review: results/subclustering/cluster8_single_cell_review.tsv
+  output_object: results/05_annotation_v1.h5ad
+  output_dir: results/annotation_v1
+  counts_layer: counts
+  global_cluster_key: leiden_0.5
+  local_cluster_key: follicular_leiden
+
 pseudobulk:
   sample_key: library_id
   group_key: group
