@@ -251,12 +251,12 @@ def build_eligibility(
                 concern.append("library_below_20_cells")
             elif any(v < min_primary_cells for v in cells):
                 concern.append("library_below_50_cells")
-            row["pseudobulk_qc_concern"] = ";".join(sorted(set(concern))) or "None"
+            row["pseudobulk_qc_concern"] = ";".join(sorted(set(concern))) or "No concern"
             if population in DESCRIPTIVE_POPULATIONS:
                 status = "Descriptive_only"
             elif not row["eligibility_20"]:
                 status = "Not_DE_ready"
-            elif not row["eligibility_50"] or row["pseudobulk_qc_concern"] != "None":
+            elif not row["eligibility_50"] or row["pseudobulk_qc_concern"] != "No concern":
                 status = "Sensitivity_only"
             else:
                 status = "Primary_DE_ready"
@@ -524,13 +524,21 @@ def run_de_stage1(config: dict[str, Any], *, allow_low_memory: bool = False) -> 
         pop_counts = counts.loc[population].reindex(libraries)
         pop_meta = metadata[metadata["population"].astype(str) == population].set_index("library").reindex(libraries)
         try:
+            stdout_buffer = io.StringIO()
+            stderr_buffer = io.StringIO()
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
                     result, diagnostics, pca, normalized = _run_one_deseq(
                         pop_counts, pop_meta, spec, alpha=alpha, n_cpus=n_cpus
                     )
-                warning_messages = sorted({f"{w.category.__name__}: {w.message}" for w in caught})
+                warning_messages = {f"{w.category.__name__}: {w.message}" for w in caught}
+            # NumPy warnings may be emitted by worker processes and therefore reach
+            # the redirected stderr rather than the local warnings registry.
+            warning_messages.update(
+                line.strip() for line in stderr_buffer.getvalue().splitlines() if "Warning" in line
+            )
+            warning_messages = sorted(warning_messages)
             diagnostics["runtime_warnings"] = "; ".join(warning_messages)
             pop_dir = out_dir / safe_name(population)
             pop_dir.mkdir(parents=True, exist_ok=True)
@@ -567,7 +575,7 @@ def run_de_stage1(config: dict[str, Any], *, allow_low_memory: bool = False) -> 
                     "replicate_consistency_concern": bool(consistency["replicate_consistency_concern"].any()) if not consistency.empty else True,
                     "warnings": "; ".join(
                         value for value in [diagnostics["runtime_warnings"], diagnostics["shrink_warning"]] if value
-                    ) or "None",
+                    ) or "No warnings",
                 }
             )
             logger.info("DE complete: %s %s (%d genes)", population, spec.name, len(result))
