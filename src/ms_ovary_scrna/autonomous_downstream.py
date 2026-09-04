@@ -309,6 +309,13 @@ def _plot_umap(adata: ad.AnnData, color: str, path: Path, title: str) -> None:
         logging.getLogger(__name__).warning("UMAP plot failed for %s: %s", color, exc)
 
 
+def _table_text(frame: pd.DataFrame) -> str:
+    """Render a compact report table without optional tabulate dependency."""
+    if frame.empty:
+        return "(no rows)"
+    return frame.to_string(index=False)
+
+
 def _run_compartment(
     source: ad.AnnData,
     *,
@@ -537,7 +544,7 @@ def _write_phase2_report(
         "",
         "## Candidate cluster review",
         "",
-        stromal.to_markdown(index=False),
+        _table_text(stromal),
         "",
         "## Local cluster 8 projection",
         "",
@@ -564,7 +571,7 @@ def _write_compartment_report(
         "- primary resolution: 0.5",
         f"- strong doublet cells excluded from primary population (retained for audit): {excluded}",
         "",
-        summary.to_markdown(index=False),
+        _table_text(summary),
         "",
         f"Output: `{output}`",
         "",
