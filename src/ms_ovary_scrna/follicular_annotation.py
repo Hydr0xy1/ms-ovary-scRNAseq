@@ -811,6 +811,27 @@ def _plot_cell_marker_heatmap(
     _save_figure(figure, output)
 
 
+def _markdown_table(frame: pd.DataFrame) -> str:
+    """Render a small Markdown table without optional ``tabulate`` dependency."""
+    if frame.empty:
+        return "_No rows._"
+    columns = [str(column) for column in frame.columns]
+    lines = [
+        "| " + " | ".join(columns) + " |",
+        "| " + " | ".join("---" for _ in columns) + " |",
+    ]
+    for values in frame.itertuples(index=False, name=None):
+        cells = []
+        for value in values:
+            if pd.isna(value):
+                text = ""
+            else:
+                text = str(value).replace("|", "\\|").replace("\n", " ")
+            cells.append(text)
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
 def _annotation_report(
     cluster_annotations: pd.DataFrame,
     cluster8: pd.DataFrame,
@@ -850,8 +871,8 @@ def _annotation_report(
         )
     )
     lines.append("")
-    lines.append(cluster8.to_markdown(index=False))
-    lines.extend(["", "## Cluster 6 comparison", "", cluster6.to_markdown(index=False)])
+    lines.append(_markdown_table(cluster8))
+    lines.extend(["", "## Cluster 6 comparison", "", _markdown_table(cluster6)])
     lines.extend(["", "## Rare populations", ""])
     lines.append(
         (
