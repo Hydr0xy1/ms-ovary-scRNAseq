@@ -173,6 +173,64 @@ def _marker_programs(kind: str, marker_path: Path) -> dict[str, list[str]]:
     return programs
 
 
+def _select_hvgs_with_loess_guard(
+    adata: ad.AnnData,
+    *,
+    n_top_genes: int,
+    batch_key: str,
+    logger: logging.Logger,
+) -> int:
+    """Run seurat_v3 HVG, guarding against loess failure from all-zero genes.
+
+    The guard operates only on a temporary HVG fitting view. The returned object
+    keeps every gene and its counts layer; only the boolean HVG annotation is
+    projected back to the full feature set.
+    """
+    try:
+        select_batch_aware_hvgs(
+            adata,
+            counts_layer=COUNTS_LAYER,
+            flavor="seurat_v3",
+            n_top_genes=n_top_genes,
+            batch_key=batch_key,
+        )
+        return 0
+    except ValueError as exc:
+        if "reciprocal condition number" not in str(exc):
+            raise
+        counts = sparse.csr_matrix(adata.layers[COUNTS_LAYER])
+        detected = np.asarray((counts > 0).sum(axis=0)).ravel()
+        min_cells = max(3, int(adata.obs[batch_key].astype(str).nunique()))
+        keep = detected >= min_cells
+        if int(keep.sum()) <= n_top_genes:
+            raise RuntimeError(
+                "seurat_v3 HVG loess failed and the subset has too few detected genes "
+                f"after min_cells={min_cells} guard"
+            ) from exc
+        logger.warning(
+            "seurat_v3 loess guard: fitting HVGs on %d/%d genes detected in >=%d cells; "
+            "full feature set and counts are retained",
+            int(keep.sum()),
+            adata.n_vars,
+            min_cells,
+        )
+        view = adata[:, keep].copy()
+        select_batch_aware_hvgs(
+            view,
+            counts_layer=COUNTS_LAYER,
+            flavor="seurat_v3",
+            n_top_genes=n_top_genes,
+            batch_key=batch_key,
+        )
+        adata.var["highly_variable"] = False
+        adata.var.loc[view.var_names, "highly_variable"] = view.var["highly_variable"].to_numpy(
+            dtype=bool
+        )
+        del view
+        gc.collect()
+        return int((~keep).sum())
+
+
 def _program_evidence(
     adata: ad.AnnData,
     cluster_key: str,
@@ -351,12 +409,11 @@ def _run_compartment(
     subset.uns.clear()
     logger.info("%s: %d cells, %d genes", name, subset.n_obs, subset.n_vars)
     normalize_log1p_preserving_counts(subset, counts_layer=COUNTS_LAYER, target_sum=10000.0)
-    select_batch_aware_hvgs(
+    hvg_guarded_genes = _select_hvgs_with_loess_guard(
         subset,
-        counts_layer=COUNTS_LAYER,
-        flavor="seurat_v3",
         n_top_genes=n_top_hvg,
         batch_key="library_id",
+        logger=logger,
     )
     compute_hvg_pca(subset, n_comps=n_pcs, scale_max_value=10.0, random_state=seed)
     subset.obsm["X_pca_unintegrated"] = subset.obsm["X_pca"].copy()
@@ -505,6 +562,7 @@ def _run_compartment(
         "integration_batch_key": "library_id",
         "cell_cycle_regressed": False,
         "annotation_policy": "marker candidates; Uncertain when evidence is insufficient",
+        "hvg_loess_guard_excluded_genes": hvg_guarded_genes,
     }
     output = output_dir / f"{prefix}_compartment_annotated.h5ad"
     _atomic_write(subset, output)
