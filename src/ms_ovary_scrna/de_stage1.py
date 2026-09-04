@@ -11,6 +11,8 @@ from __future__ import annotations
 import contextlib
 import io
 import logging
+import os
+import tempfile
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -526,17 +528,30 @@ def run_de_stage1(config: dict[str, Any], *, allow_low_memory: bool = False) -> 
         try:
             stdout_buffer = io.StringIO()
             stderr_buffer = io.StringIO()
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-                    result, diagnostics, pca, normalized = _run_one_deseq(
-                        pop_counts, pop_meta, spec, alpha=alpha, n_cpus=n_cpus
-                    )
-                warning_messages = {f"{w.category.__name__}: {w.message}" for w in caught}
+            # Capture both Python warnings and the OS-level stderr inherited by
+            # PyDESeq2/NumPy worker processes.  ``redirect_stderr`` alone cannot
+            # see warnings emitted after a worker is spawned.
+            with tempfile.TemporaryFile(mode="w+b") as fd_stderr:
+                os.set_inheritable(fd_stderr.fileno(), True)
+                original_stderr = os.dup(2)
+                try:
+                    os.dup2(fd_stderr.fileno(), 2)
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                            result, diagnostics, pca, normalized = _run_one_deseq(
+                                pop_counts, pop_meta, spec, alpha=alpha, n_cpus=n_cpus
+                            )
+                        warning_messages = {f"{w.category.__name__}: {w.message}" for w in caught}
+                finally:
+                    os.dup2(original_stderr, 2)
+                    os.close(original_stderr)
+                fd_stderr.seek(0)
+                os_stderr_text = fd_stderr.read().decode(errors="replace")
             # NumPy warnings may be emitted by worker processes and therefore reach
-            # the redirected stderr rather than the local warnings registry.
+            # the redirected OS-level stderr rather than the local warnings registry.
             warning_messages.update(
-                line.strip() for line in stderr_buffer.getvalue().splitlines() if "Warning" in line
+                line.strip() for line in (stderr_buffer.getvalue() + "\n" + os_stderr_text).splitlines() if "Warning" in line
             )
             warning_messages = sorted(warning_messages)
             diagnostics["runtime_warnings"] = "; ".join(warning_messages)
