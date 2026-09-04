@@ -200,35 +200,43 @@ def _select_hvgs_with_loess_guard(
             raise
         counts = sparse.csr_matrix(adata.layers[COUNTS_LAYER])
         detected = np.asarray((counts > 0).sum(axis=0)).ravel()
-        min_cells = max(3, int(adata.obs[batch_key].astype(str).nunique()))
-        keep = detected >= min_cells
-        if int(keep.sum()) <= n_top_genes:
-            raise RuntimeError(
-                "seurat_v3 HVG loess failed and the subset has too few detected genes "
-                f"after min_cells={min_cells} guard"
-            ) from exc
-        logger.warning(
-            "seurat_v3 loess guard: fitting HVGs on %d/%d genes detected in >=%d cells; "
-            "full feature set and counts are retained",
-            int(keep.sum()),
-            adata.n_vars,
-            min_cells,
-        )
-        view = adata[:, keep].copy()
-        select_batch_aware_hvgs(
-            view,
-            counts_layer=COUNTS_LAYER,
-            flavor="seurat_v3",
-            n_top_genes=n_top_genes,
-            batch_key=batch_key,
-        )
-        adata.var["highly_variable"] = False
-        adata.var.loc[view.var_names, "highly_variable"] = view.var["highly_variable"].to_numpy(
-            dtype=bool
-        )
-        del view
-        gc.collect()
-        return int((~keep).sum())
+        n_batches = int(adata.obs[batch_key].astype(str).nunique())
+        last_error: Exception = exc
+        for min_cells in [max(3, n_batches), 20, 50, 100, 200]:
+            keep = detected >= min_cells
+            if int(keep.sum()) <= n_top_genes:
+                continue
+            logger.warning(
+                "seurat_v3 loess guard: fitting HVGs on %d/%d genes detected in >=%d cells; "
+                "full feature set and counts are retained",
+                int(keep.sum()),
+                adata.n_vars,
+                min_cells,
+            )
+            view = adata[:, keep].copy()
+            try:
+                select_batch_aware_hvgs(
+                    view,
+                    counts_layer=COUNTS_LAYER,
+                    flavor="seurat_v3",
+                    n_top_genes=n_top_genes,
+                    batch_key=batch_key,
+                )
+            except ValueError as retry_error:
+                last_error = retry_error
+                del view
+                gc.collect()
+                continue
+            adata.var["highly_variable"] = False
+            adata.var.loc[view.var_names, "highly_variable"] = view.var["highly_variable"].to_numpy(
+                dtype=bool
+            )
+            del view
+            gc.collect()
+            return int((~keep).sum())
+        raise RuntimeError(
+            "seurat_v3 HVG loess failed after all documented detection-count guards"
+        ) from last_error
 
 
 def _program_evidence(
