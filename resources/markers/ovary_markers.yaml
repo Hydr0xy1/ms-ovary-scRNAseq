@@ -119,3 +119,27 @@ follicular_subclustering:
     positive: [Ptgfr, Lhcgr, Sfrp4, Star, Cyp11a1, Scarb1]
   Stress:
     positive: [Fos, Jun, Junb, Ddit3, Atf4, Hspa1a, Hspa1b]
+
+# Conservative marker programs used only for local follicular/steroidogenic
+# evidence review. Keys are lower-case so score columns are deterministic.
+follicular_annotation_review:
+  granulosa:
+    positive: [Foxl2, Amh, Inha, Inhbb, Fshr, Gja1, Hsd17b1, Kitl]
+  preantral:
+    positive: [Gatm, Igfbp5, Kitl]
+  antral:
+    positive: [Inhbb, Inha, Hsd17b1, Gja1]
+  atretic:
+    positive: [Pik3ip1, Itih5, Ghr]
+  cycling:
+    positive: [Mki67, Top2a, Cdk1, Cenpf, Ube2c, Racgap1]
+  theca:
+    positive: [Aldh1a1, Cyp17a1, Cyp11a1, Hsd3b1, Star, Fdx1, Mrap, Mgarp, Srd5a1, Lhcgr]
+  luteal:
+    positive: [Ptgfr, Sfrp4, Lhcgr, Star, Cyp11a1]
+  stromal:
+    positive: [Dcn, Lum, Col1a1, Col1a2, Ogn, Bgn, Pdgfra]
+  immune:
+    positive: [Ptprc, Tyrobp, Lyz2, Fcer1g]
+  oocyte:
+    positive: [Ddx4, Gdf9, Nobox, Ooep, Figla, Zp2, Zp3, Mov10l1, Mael, Lhx8, Kit, Sohlh1, Sohlh2]

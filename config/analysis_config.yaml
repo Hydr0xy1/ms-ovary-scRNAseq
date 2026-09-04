@@ -141,6 +141,17 @@ follicular_subclustering:
                 Hjurp, Cdca3, Hn1, Cdc20, Ttk, Cdc25c, Kif2c, Rangap1, Ncapd2,
                 Dlgap5, Cdca2, Cdca8, Ect2, Kif23, Hmmr, Aurka, Psf3]
 
+follicular_annotation_review:
+  # Marker-guided local annotation only; no cells are removed and no condition
+  # comparison is performed in this stage.
+  output_dir: results/subclustering
+  figure_dir: figures/subclustering
+  annotated_object: results/subclustering/follicular_steroidogenic_annotated.h5ad
+  lineage_high_percentile: 75.0
+  within_library_doublet_quantile: 0.75
+  within_library_high_qc_quantile: 0.50
+  evidence_top_n: 30
+
 pseudobulk:
   sample_key: library_id
   group_key: group
