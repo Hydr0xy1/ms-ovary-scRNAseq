@@ -141,8 +141,12 @@ def _finite_audit(
         "lfcSE": "nonfinite_lfcSE",
         "stat": "nonfinite_stat",
         "pvalue": "nonfinite_pvalue",
-        "log2FC_shrunk": "nonfinite_shrunk_lfc",
     }
+    # ``log2FC_shrunk`` is intentionally NaN in the OT_vs_OC Wald table because
+    # that contrast is algebraically derived from the two apeGLM-shrunk base
+    # coefficients.  Check it only for the dedicated apeGLM audit operation.
+    if warning_source == "apeGLM_shrinkage":
+        checks["log2FC_shrunk"] = "nonfinite_shrunk_lfc"
     affected: set[str] = set()
     for column, out_column in checks.items():
         if column not in result:
@@ -318,6 +322,7 @@ def build_rescue_ready_effects(wide: pd.DataFrame) -> pd.DataFrame:
         default="indeterminate",
     )
     out["residual_near_young_effect_size"] = out["residual_distance"] <= NEAR_YOUNG_LFC
+    out["near_young_effect_size"] = out["residual_near_young_effect_size"]
     # Literal sign rule requested by the analysis specification.  The absolute
     # residual is retained so exact/near-zero values are not over-interpreted.
     out["overshoot_candidate"] = out["aging_primary"] & (
@@ -630,6 +635,10 @@ def run_de_stage1_5(config: dict[str, Any], *, allow_low_memory: bool = False) -
 
         long_df = pd.concat(long_results, ignore_index=True)
         wide = _add_derived_shrunk(_flatten_wide(long_df))
+        derived_ot_oc_shrunk = wide.set_index("gene")["OT_vs_OC_log2FC_shrunk"]
+        derived_mask = long_df["contrast"] == "OT_vs_OC"
+        long_df.loc[derived_mask, "log2FC_shrunk"] = long_df.loc[derived_mask, "gene"].map(derived_ot_oc_shrunk)
+        long_df.loc[derived_mask, "shrunk_lfc_source"] = "derived:apeGLM(OT_vs_Y)-apeGLM(OC_vs_Y)"
         rescue = build_rescue_ready_effects(wide)
         rescue.insert(0, "population", population)
         long_df.insert(0, "population", population)
