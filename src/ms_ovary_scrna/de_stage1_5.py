@@ -107,6 +107,7 @@ def _finite_audit(
     population: str,
     warning_lines: list[str],
     warning_source: str,
+    expected_cooks_genes: set[str] | None = None,
 ) -> dict[str, Any]:
     """Summarize warnings and non-finite formal result values."""
 
@@ -124,12 +125,16 @@ def _finite_audit(
         "nonfinite_pvalue": 0,
         "nonfinite_shrunk_lfc": 0,
         "padj_na_count": 0,
+        "pvalue_na_count": 0,
+        "cooks_filtered_pvalue_count": 0,
+        "unexpected_nonfinite_pvalue": 0,
         "extreme_abs_lfc_gt_20": 0,
         "affected_genes": "None",
         "numerical_status": "not_applicable" if result is None else "finite",
     }
     if result is None:
         return row
+    expected_cooks_genes = expected_cooks_genes or set()
     checks = {
         "baseMean": "nonfinite_baseMean",
         "log2FoldChange": "nonfinite_log2FoldChange",
@@ -144,18 +149,41 @@ def _finite_audit(
             continue
         bad = ~np.isfinite(pd.to_numeric(result[column], errors="coerce"))
         row[out_column] = int(bad.sum())
-        if bad.any() and "gene" in result:
+        if column == "pvalue":
+            row["pvalue_na_count"] = int(result[column].isna().sum())
+            # A NaN p-value is expected for a gene filtered by DESeq2's Cook's
+            # rule.  Only non-Cook's non-finite p-values are numerical anomalies.
+            if "gene" in result:
+                gene_values = result["gene"].astype(str)
+                unexpected = bad & ~gene_values.isin(expected_cooks_genes)
+                if unexpected.any():
+                    affected.update(gene_values.loc[unexpected].tolist())
+        elif bad.any() and "gene" in result:
             affected.update(result.loc[bad, "gene"].astype(str).tolist())
     if "padj" in result:
         row["padj_na_count"] = int(result["padj"].isna().sum())
+    if "pvalue" in result and "gene" in result:
+        pvalue_na = result["pvalue"].isna()
+        row["cooks_filtered_pvalue_count"] = int(
+            sum(pvalue_na & result["gene"].astype(str).isin(expected_cooks_genes))
+        )
+        row["unexpected_nonfinite_pvalue"] = int(
+            row["nonfinite_pvalue"] - row["cooks_filtered_pvalue_count"]
+        )
     if "log2FoldChange" in result:
         row["extreme_abs_lfc_gt_20"] = int((result["log2FoldChange"].abs() > EXTREME_ABS_LFC).sum())
     nonfinite_columns = [name for name in checks.values() if row[name] > 0]
+    if row["unexpected_nonfinite_pvalue"] == 0:
+        nonfinite_columns = [name for name in nonfinite_columns if name != "nonfinite_pvalue"]
     row["affected_genes"] = ",".join(sorted(affected)[:100]) if affected else "None"
     if nonfinite_columns or row["extreme_abs_lfc_gt_20"] > 0:
         row["numerical_status"] = "formal_result_anomaly"
     elif warning_lines:
         row["numerical_status"] = "warning_but_formal_values_finite"
+    elif row["cooks_filtered_pvalue_count"] > 0:
+        row["numerical_status"] = "expected_cooks_filtering"
+    elif row["padj_na_count"] > 0:
+        row["numerical_status"] = "expected_independent_filtering"
     return row
 
 
@@ -581,6 +609,11 @@ def run_de_stage1_5(config: dict[str, Any], *, allow_low_memory: bool = False) -
                     operation=f"Wald_summary_{spec.name}",
                     warning_lines=summary_capture.warning_lines,
                     warning_source="Wald_test_and_FDR",
+                    expected_cooks_genes=set(
+                        pd.Index(dds.var_names)[
+                            np.asarray(dds.cooks_outlier(), dtype=bool)
+                        ].astype(str)
+                    ),
                 )
             )
             if shrink_capture is not None:
