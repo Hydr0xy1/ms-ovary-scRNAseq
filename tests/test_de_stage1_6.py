@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ms_ovary_scrna.de_stage1_6 import (
+    _add_observed_gene_levels,
     build_population_evidence,
     cosine_similarity,
     effect_magnitude_summary,
@@ -93,7 +94,18 @@ def test_population_level_three_is_not_a_gene_level_claim() -> None:
     assert evidence.loc[0, "population_evidence_level"].startswith("Level_3")
 
 
+def test_gene_evidence_levels_are_strictly_nested() -> None:
+    levels = _add_observed_gene_levels(
+        _rescue(), population="test", population_level3=True
+    )
+    assert int(levels["Level_1_directional_candidate"].sum()) == 3
+    assert int(levels["Level_2_DE_supported_candidate"].sum()) == 2
+    assert (
+        ~levels["Level_2_DE_supported_candidate"]
+        | levels["Level_1_directional_candidate"]
+    ).all()
+
+
 def test_cosine_similarity_handles_zero_vectors() -> None:
     assert np.isclose(cosine_similarity([1, 0], [-1, 0]), -1.0)
     assert np.isnan(cosine_similarity([0, 0], [1, 2]))
-

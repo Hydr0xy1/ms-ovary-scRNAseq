@@ -435,8 +435,14 @@ def _add_observed_gene_levels(
 ) -> pd.DataFrame:
     out = rescue.copy()
     out.insert(0, "population", population)
-    out["Level_1_directional_candidate"] = out["directional_rescue_candidate"].astype(bool)
-    out["Level_2_DE_supported_candidate"] = out["FDR_supported_rescue_candidate"].astype(bool)
+    out["Level_1_directional_candidate"] = (
+        out["aging_primary"]
+        & out["opposite_direction"]
+        & (out["residual_distance"] < out["aging_distance"])
+    )
+    out["Level_2_DE_supported_candidate"] = (
+        out["Level_1_directional_candidate"] & out["treatment_FDR_supported"]
+    )
     out["Level_3_population_signature_supported"] = bool(population_level3)
     out["evidence_note"] = np.select(
         [
@@ -528,6 +534,8 @@ def _report(
     columns = [
         "population",
         "n_aging_primary_observed",
+        "n_Level_1_directional_candidate",
+        "n_Level_2_DE_supported_candidate",
         "directional_rescue_fraction_observed",
         "directional_rescue_fraction_null_median",
         "directional_rescue_fraction_observed_rank",
@@ -777,9 +785,8 @@ def run_de_stage1_6(
     magnitude_summary.to_csv(
         output_root / "effect_magnitude_summary_all_populations.tsv", sep="\t", index=False
     )
-    evidence.to_csv(output_root / "population_reversal_evidence.tsv", sep="\t", index=False)
-
     level3_lookup = evidence.set_index("population")["permutation_supported_signature"].to_dict()
+    gene_level_counts: list[dict[str, Any]] = []
     for population, rescue in observed_rescue.items():
         levels = _add_observed_gene_levels(
             rescue,
@@ -792,6 +799,27 @@ def run_de_stage1_6(
             index=False,
             compression="gzip",
         )
+        gene_level_counts.append(
+            {
+                "population": population,
+                "n_Level_1_directional_candidate": int(
+                    levels["Level_1_directional_candidate"].sum()
+                ),
+                "n_Level_2_DE_supported_candidate": int(
+                    levels["Level_2_DE_supported_candidate"].sum()
+                ),
+                "Level_2_subset_of_Level_1": bool(
+                    (
+                        ~levels["Level_2_DE_supported_candidate"]
+                        | levels["Level_1_directional_candidate"]
+                    ).all()
+                ),
+            }
+        )
+    evidence = evidence.merge(
+        pd.DataFrame(gene_level_counts), on="population", validate="one_to_one"
+    )
+    evidence.to_csv(output_root / "population_reversal_evidence.tsv", sep="\t", index=False)
 
     _plot_metric(
         permutation_summary,
