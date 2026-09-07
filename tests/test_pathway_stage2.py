@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +16,7 @@ from ms_ovary_scrna.pathway_stage2 import (
     load_stage1_6_assignments,
     pathway_effect_geometry,
     pathway_member_overlap,
+    run_all_gsea,
 )
 
 
@@ -162,3 +165,88 @@ def test_evidence_levels_are_nested() -> None:
     assert (
         classify_pathway_evidence({**base, "direction_opposite": False}) == "Aging_only"
     )
+
+
+def test_gsea_workers_are_recycled_after_each_bounded_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression guard for the GSEApy worker-memory accumulation fix."""
+
+    import ms_ovary_scrna.pathway_stage2 as stage2
+
+    pools: list[object] = []
+
+    class ImmediateFuture:
+        def __init__(self, result: pd.DataFrame) -> None:
+            self._result = result
+
+        def result(self) -> pd.DataFrame:
+            return self._result
+
+    class ImmediateExecutor:
+        def __init__(self, *, max_workers: int) -> None:
+            self.max_workers = max_workers
+            self.n_submitted = 0
+            pools.append(self)
+
+        def __enter__(self) -> "ImmediateExecutor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def submit(
+            self,
+            fn: Callable[..., pd.DataFrame],
+            *args: object,
+            **kwargs: object,
+        ) -> ImmediateFuture:
+            self.n_submitted += 1
+            return ImmediateFuture(fn(*args, **kwargs))
+
+    def fake_stage1_population(root: Path, population: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "contrast": list(stage2.CONTRASTS),
+                "gene": ["g1"] * len(stage2.CONTRASTS),
+                "stat": [1.0] * len(stage2.CONTRASTS),
+            }
+        )
+
+    def fake_deduplicate(
+        table: pd.DataFrame, mapping: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        return pd.DataFrame({"canonical_mouse_symbol": ["G1"], "stat": [1.0]}), pd.DataFrame()
+
+    def fake_gsea(
+        ranking: pd.DataFrame,
+        gene_sets: dict[str, list[str]],
+        *,
+        population: str,
+        contrast: str,
+        threads: int,
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            {"population": [population], "contrast": [contrast], "pathway": ["H1"]}
+        )
+
+    monkeypatch.setattr(stage2, "ProcessPoolExecutor", ImmediateExecutor)
+    monkeypatch.setattr(stage2, "as_completed", lambda futures: list(futures))
+    monkeypatch.setattr(stage2, "_read_stage1_population", fake_stage1_population)
+    monkeypatch.setattr(stage2, "deduplicate_rank_table", fake_deduplicate)
+    monkeypatch.setattr(stage2, "run_preranked_gsea", fake_gsea)
+
+    result = run_all_gsea(
+        tmp_path,
+        pd.DataFrame(),
+        {"H1": ["G1"]},
+        tmp_path,
+        outer_workers=4,
+        gsea_threads=4,
+        logger=logging.getLogger("test_gsea_worker_recycling"),
+    )
+
+    assert len(result) == len(stage2.POPULATIONS) * len(stage2.CONTRASTS)
+    assert len(pools) == 6
+    assert [pool.n_submitted for pool in pools] == [4, 4, 4, 4, 4, 1]
+    assert all(pool.n_submitted <= pool.max_workers for pool in pools)

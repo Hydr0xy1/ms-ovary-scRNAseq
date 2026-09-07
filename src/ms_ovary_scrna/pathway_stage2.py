@@ -989,23 +989,31 @@ def run_all_gsea(
     tasks = prepare_tasks()
     max_jobs = min(outer_workers, max(1, (os.cpu_count() or 1) // max(gsea_threads, 1)))
     results: list[pd.DataFrame] = []
-    with ProcessPoolExecutor(max_workers=max_jobs) as executor:
-        futures = {
-            executor.submit(
-                run_preranked_gsea,
-                ranking,
-                gene_sets,
-                population=population,
-                contrast=contrast,
-                threads=gsea_threads,
-            ): (population, contrast)
-            for population, contrast, ranking in tasks
-        }
-        for future in as_completed(futures):
-            population, contrast = futures[future]
-            frame = future.result()
-            results.append(frame)
-            logger.info("GSEA complete: %s/%s tested=%d", population, contrast, len(frame))
+    # GSEApy keeps sizeable permutation workspaces in a worker's allocator after
+    # a task returns.  Reusing the same workers for all 21 analyses therefore
+    # grows resident memory batch by batch and can hit a container memory cap.
+    # Give each worker exactly one task, then close the whole pool so the OS
+    # releases that memory before the next batch.  This changes scheduling only;
+    # the GSEA parameters, seeds, rankings, and results are unchanged.
+    for start in range(0, len(tasks), max_jobs):
+        batch = tasks[start : start + max_jobs]
+        with ProcessPoolExecutor(max_workers=len(batch)) as executor:
+            futures = {
+                executor.submit(
+                    run_preranked_gsea,
+                    ranking,
+                    gene_sets,
+                    population=population,
+                    contrast=contrast,
+                    threads=gsea_threads,
+                ): (population, contrast)
+                for population, contrast, ranking in batch
+            }
+            for future in as_completed(futures):
+                population, contrast = futures[future]
+                frame = future.result()
+                results.append(frame)
+                logger.info("GSEA complete: %s/%s tested=%d", population, contrast, len(frame))
     combined = pd.concat(results, ignore_index=True)
     success = combined.groupby(["population", "contrast"], observed=True).size()
     if len(success) != len(POPULATIONS) * len(CONTRASTS) or (success <= 0).any():
