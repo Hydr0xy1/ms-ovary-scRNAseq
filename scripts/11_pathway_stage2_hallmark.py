@@ -13,7 +13,10 @@ def main() -> None:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
     parser.add_argument("--model-workers", type=int, default=7)
     parser.add_argument("--model-cpus", type=int, default=4)
-    parser.add_argument("--gsea-workers", type=int, default=7)
+    # GSEApy's 10,000-permutation workspace is large (the project runs inside
+    # a 64 GiB cgroup).  One process at a time is the safe default; callers may
+    # raise this only after confirming their container's memory headroom.
+    parser.add_argument("--gsea-workers", type=int, default=1)
     parser.add_argument("--gsea-threads", type=int, default=4)
     parser.add_argument("--allow-low-memory", action="store_true")
     args = parser.parse_args()
