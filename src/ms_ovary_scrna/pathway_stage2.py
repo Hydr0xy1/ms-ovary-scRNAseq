@@ -29,14 +29,13 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from .de_stage1 import LIBRARIES_BY_GROUP, load_broad_inputs, prefilter_genes
-from .de_stage1_5 import ALPHA, ALL_LIBRARIES, build_rescue_ready_effects
+from .de_stage1_5 import ALPHA, ALL_LIBRARIES
 from .de_stage1_6 import (
     EXPECTED_PERMUTATIONS,
     _fit_permutation,
     cosine_similarity,
     enumerate_permutation_assignments,
     validate_permutation_assignments,
-    whole_signature_metrics,
 )
 from .project import project_paths, require_compute_resources, setup_logging
 from .pseudobulk import safe_name
@@ -763,6 +762,14 @@ def _fit_population_checkpoints(
             )
     warning_path = pop_dir / f"warning_audit_{permutation_ids[0]}_{permutation_ids[-1]}.tsv"
     pd.DataFrame(warning_records).to_csv(warning_path, sep="\t", index=False)
+    # PyDESeq2 uses joblib/loky internally.  Its reusable child pool otherwise
+    # waits for a long idle timeout and delays outer ProcessPoolExecutor shutdown
+    # after a population has finished.  Explicit cleanup releases those four
+    # workers immediately without changing any fitted result.
+    if fitted:
+        from joblib.externals.loky import get_reusable_executor
+
+        get_reusable_executor().shutdown(wait=True, kill_workers=True)
     return {
         "population": population,
         "n_genes": int(filtered.shape[1]),
