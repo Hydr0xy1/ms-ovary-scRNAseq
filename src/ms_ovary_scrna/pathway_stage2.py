@@ -1659,7 +1659,7 @@ def write_stage2_report(
         "",
         f"- git commit: `{_git_commit(project_root)}`",
         f"- runtime: {runtime_seconds / 3600:.3f} hours ({runtime_seconds:.1f} seconds)",
-        "- tests: `tests/test_pathway_stage2.py` passed locally and in the server preflight",
+        "- tests: server preflight passed all Stage 2 unit tests; local preflight passed Python compilation and diff checks",
         "- GSEA implementation: GSEApy prerank, standard weighted score, 10,000 permutations",
         f"- GSEApy version: {version('gseapy')}",
         f"- MSigDB version: Mouse MSigDB {MSIGDB_RELEASE}, {MSIGDB_COLLECTION}",
