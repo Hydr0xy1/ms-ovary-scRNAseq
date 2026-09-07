@@ -838,18 +838,20 @@ def validate_observed_model_checkpoints(
             contrast_errors[contrast] = float(
                 (joined[column] - joined[f"{column}_stage1"]).abs().max()
             )
-        rescue = build_rescue_ready_effects(fitted.reset_index())
-        whole = whole_signature_metrics(
-            rescue, population=population, permutation_id="P001", is_observed=True
-        )
-        current = whole[whole["scope"] == "all_tested_genes"].iloc[0]
+        # The checkpoint intentionally stores only gene-level LFCs.  The Stage
+        # 1.6 whole-signature audit needs no p values or aging-primary flags, so
+        # calculate its all-tested-gene endpoints directly from these vectors.
+        aging = fitted["OC_vs_Y_log2FoldChange"].to_numpy(dtype=float)
+        treatment = fitted["OT_vs_OC_log2FoldChange"].to_numpy(dtype=float)
+        current_spearman = float(spearmanr(aging, treatment).statistic)
+        current_cosine = cosine_similarity(aging, treatment)
         saved = pd.read_csv(
             stage1_6_root / safe_name(population) / "whole_signature_reversal.tsv",
             sep="\t",
         )
         saved = saved[(saved["permutation_id"] == "P001") & (saved["scope"] == "all_tested_genes")].iloc[0]
-        spearman_error = abs(float(current["spearman"]) - float(saved["spearman"]))
-        cosine_error = abs(float(current["cosine_similarity"]) - float(saved["cosine_similarity"]))
+        spearman_error = abs(current_spearman - float(saved["spearman"]))
+        cosine_error = abs(current_cosine - float(saved["cosine_similarity"]))
         row = {
             "population": population,
             "n_genes_overlap": int(len(joined)),

@@ -85,6 +85,17 @@ def test_spearman_sign_cosine_and_residual_norm() -> None:
     assert np.isclose(geometry["directional_fraction"], 1.0)
 
 
+def test_lfc_only_checkpoint_supports_whole_signature_metrics() -> None:
+    aging = np.array([1.0, 2.0, 3.0])
+    treatment = np.array([-1.0, -2.0, -3.0])
+    # Regression guard: the reproduction gate must not require padj columns.
+    from ms_ovary_scrna.de_stage1_6 import cosine_similarity
+    from scipy.stats import spearmanr
+
+    assert spearmanr(aging, treatment).statistic == -1.0
+    assert np.isclose(cosine_similarity(aging, treatment), -1.0)
+
+
 def test_exact_permutation_p_and_observed_rank() -> None:
     frame = pd.DataFrame(
         {
