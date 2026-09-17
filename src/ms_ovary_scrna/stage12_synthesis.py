@@ -374,3 +374,31 @@ flowchart TD
     print("FINAL_ADVANCED_ANALYSIS_HANDOFF_CN=results/FINAL_ADVANCED_ANALYSIS_HANDOFF_CN.md")
     print("WHAT_HAVE_WE_LEARNED_CN=results/WHAT_HAVE_WE_LEARNED_CN.md")
     print("PAPER_FIGURE_PLAN_CN=results/PAPER_FIGURE_PLAN_CN.md")
+    geometry_text = "; ".join(
+        f"{row.population}:Y={getattr(row, 'Y', float('nan')):.3f},"
+        f"OC={getattr(row, 'OC', float('nan')):.3f},OT={getattr(row, 'OT', float('nan')):.3f}"
+        for row in geometry.loc[geometry["population"].isin(["Granulosa", "Stromal_fibroblast"])].itertuples(index=False)
+    )
+    communication_ligands = (
+        int(communication["ligand"].nunique())
+        if not communication.empty and "ligand" in communication
+        else 0
+    )
+    important_results = [
+        "Granulosa and Stromal_fibroblast were both rank 1/20 in broad exact-permutation reversal",
+        f"{len(strong_pathways)} strong multi-metric population-pathway reversals were retained",
+        f"{len(localized)} broad-pathway/subtype localization links met the predefined support rule",
+        f"Cross-validated aging-axis group means: {geometry_text}",
+        f"Targeted Stromal-to-Granulosa analysis retained {communication_ligands} candidate ligands",
+    ]
+    limitations = [
+        "n=3 libraries per group and library/pool, not single cell, is the biological replicate",
+        "20 exact assignments imply a minimum empirical p-value of 0.05",
+        "external atlas differs in age/platform and retains SoupX-corrected fractional count-like values",
+        "TF, NMF, and ligand-target results are knowledge/model-based hypotheses rather than direct mechanism",
+        "no matched phenotype data are available, so transcriptomic reversal is not proven rejuvenation",
+    ]
+    for index, result in enumerate(important_results, start=1):
+        print(f"IMPORTANT_RESULT_{index}={result}")
+    for index, limitation in enumerate(limitations, start=1):
+        print(f"IMPORTANT_LIMITATION_{index}={limitation}")
