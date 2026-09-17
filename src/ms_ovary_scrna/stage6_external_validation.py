@@ -45,6 +45,13 @@ def signature_concordance(internal: pd.Series, external: pd.Series) -> dict[str,
     }
 
 
+def set_population_column(table: pd.DataFrame, population: str) -> pd.DataFrame:
+    """Set a single population column and place it first."""
+    result = table.copy()
+    result["population"] = population
+    return result[["population", *[column for column in result.columns if column != "population"]]]
+
+
 def _write_skip(output_root: Path, reason: str) -> None:
     (output_root / "EXTERNAL_VALIDATION_NOT_AVAILABLE.md").write_text(
         "# Stage 6 external validation skipped\n\n"
@@ -212,7 +219,8 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
         joined["external_aging_supported"] = joined["external_aging_FDR"].lt(0.05) & joined["direction_concordant_external_aging"]
         joined["treatment_opposes_external_aging"] = joined["treatment_effect"] * joined["external_aging_log2FC"] < 0
         joined["external_supported_reversal"] = joined["external_aging_supported"] & joined["treatment_opposes_external_aging"]
-        joined.insert(0, "population", population)
+        # ``result`` already carries population, so assignment must be idempotent.
+        joined = set_population_column(joined, population)
         reversal_rows.append(joined)
         gsea_rows.append(_run_gsea(result, gene_sets, population))
         logger.info("External DE complete: %s", population)
