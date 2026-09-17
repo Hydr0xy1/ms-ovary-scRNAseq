@@ -55,6 +55,31 @@ def _write_skip(output_root: Path, reason: str) -> None:
     print("STAGE6_EXTERNAL_VALIDATION_SKIPPED")
 
 
+def prepare_external_pseudobulk_counts(counts: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float | int | str]]:
+    """Round sample-aggregated SoupX-adjusted counts for the DESeq2 likelihood.
+
+    GSE232309 stores SoupX ambient-RNA-corrected values in the Seurat counts
+    slot.  They are non-negative count-like values but are fractional.  We
+    preserve them through cell-to-sample aggregation and round only the final
+    pseudobulk totals, avoiding the larger distortion from per-cell rounding.
+    """
+    values = counts.to_numpy(dtype=np.float64)
+    if not np.isfinite(values).all():
+        raise ValueError("External pseudobulk contains non-finite values")
+    if (values < 0).any():
+        raise ValueError("External pseudobulk contains negative values")
+    rounded = np.rint(values).astype(np.int64)
+    delta = np.abs(values - rounded)
+    audit: dict[str, float | int | str] = {
+        "source_count_provenance": "SoupX ambient-RNA-corrected Seurat counts layer",
+        "rounding_stage": "after biological-sample pseudobulk aggregation",
+        "rounding_method": "nearest integer (numpy.rint)",
+        "n_fractional_pseudobulk_entries": int((delta > 1e-8).sum()),
+        "max_absolute_rounding_delta": float(delta.max(initial=0.0)),
+    }
+    return pd.DataFrame(rounded, index=counts.index, columns=counts.columns), audit
+
+
 def _run_external_deseq(counts: pd.DataFrame, metadata: pd.DataFrame, n_cpus: int = 4) -> pd.DataFrame:
     from pydeseq2.dds import DeseqDataSet
     from pydeseq2.default_inference import DefaultInference
@@ -62,7 +87,8 @@ def _run_external_deseq(counts: pd.DataFrame, metadata: pd.DataFrame, n_cpus: in
 
     metadata = metadata.set_index("sample_id").reindex(counts.index).copy()
     metadata["age_group"] = pd.Categorical(metadata["age_group"], categories=["Young", "Aged"])
-    filtered = prefilter_genes(counts.astype(np.int64), min_count=10, min_samples=3)
+    integer_counts, _ = prepare_external_pseudobulk_counts(counts)
+    filtered = prefilter_genes(integer_counts, min_count=10, min_samples=3)
     inference = DefaultInference(n_cpus=n_cpus)
     dds = DeseqDataSet(
         counts=filtered,
@@ -163,6 +189,9 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
             _write_skip(output_root, f"{population} biological-sample audit failed: {group_counts}")
             return
         counts = pd.read_csv(extract_root / f"{population}__pseudobulk_counts.tsv.gz", sep="\t").set_index("sample_id")
+        _, count_audit = prepare_external_pseudobulk_counts(counts)
+        for key, value in count_audit.items():
+            metadata[key] = value
         result = _run_external_deseq(counts, metadata)
         result.insert(0, "population", population)
         signatures.append(result)
@@ -220,7 +249,7 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
         "使用GEO官方processed Granulosa/Stroma RDS，不下载FASTQ。reference为3月龄vs9月龄，每组4个biological samples；license为CC BY 4.0。",
         "",
         "## 3. 方法",
-        "在external dataset内部按biological sample聚合raw counts，使用~age_group的PyDESeq2；不把external与internal做Harmony或强制batch correction。比较层面是gene-signature Spearman/cosine、方向一致率和Mouse Hallmark preranked GSEA。",
+        "公开RDS的counts层是论文所述SoupX去环境RNA后的非负小数count-like值。先在每个biological sample内求和，再仅对最终pseudobulk总数做最近整数舍入以满足DESeq2负二项模型；不把它误称为未经处理的原始UMI。随后使用~age_group的PyDESeq2；不把external与internal做Harmony或强制batch correction。比较层面是gene-signature Spearman/cosine、方向一致率和Mouse Hallmark preranked GSEA。",
         "",
         "## 4. Sample audit",
         reference_metadata[["population", "sample_id", "age_group", "n_cells", "total_umi"]].to_markdown(index=False),
@@ -238,7 +267,7 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
         "不同年龄、平台、解离、注释与鼠品系会影响一致性。外部一致不能证明MRJP1导致表型年轻化，也不能替代本项目新增biological replicates。",
         "",
         "## 9. 局限与下一步",
-        "只验证Granulosa和Stromal两个可可靠映射lineage；subtype名称不强行一一对应。未来应使用预注册的新实验队列和matched phenotype复现。",
+        "只验证Granulosa和Stromal两个可可靠映射lineage；subtype名称不强行一一对应。公开对象只保留SoupX校正后的count-like层，最近整数舍入是外部验证的额外技术局限。未来应使用预注册的新实验队列和matched phenotype复现。",
     ]
     (output_root / "EXTERNAL_AGING_VALIDATION_REPORT_CN.md").write_text("\n".join(report), encoding="utf-8")
 
