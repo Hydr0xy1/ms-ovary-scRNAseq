@@ -11,6 +11,8 @@ tbb>=2021.6
 celltypist
 pydeseq2
 gseapy
+decoupler==2.2.0
+liana==1.7.0
 
 # Interactive analysis and common exports
 jupyterlab
