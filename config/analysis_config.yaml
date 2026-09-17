@@ -231,3 +231,18 @@ stage4_composition_decomposition:
   clr_pseudocount_cells: 0.5
   expression_target_sum: 10000
   random_seed: 20260917
+
+stage5_rejuvenation_geometry:
+  broad_counts: results/pseudobulk_ready/broad_counts.tsv.gz
+  output_dir: results/stage5_rejuvenation_geometry
+  figure_dir: figures/stage5_rejuvenation_geometry
+  primary_populations: [Granulosa, Stromal_fibroblast]
+  supplementary_populations:
+    [Immune, Ovarian_epithelial, Smooth_muscle_pericyte,
+     Theca_steroidogenic, Vascular_endothelial]
+  min_gene_count: 10
+  min_gene_samples: 3
+  n_variable_genes: 2000
+  n_pcs: 5
+  normalization_target: 1000000
+  random_seed: 20260917

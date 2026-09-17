@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import multiprocessing as mp
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from importlib.metadata import version
@@ -692,67 +693,91 @@ def run_stage3(
     if not h5ad_path.exists():
         raise FileNotFoundError(h5ad_path)
 
-    inventory, coverage, counts = _inventory_and_counts(
-        h5ad_path,
-        settings["target_broad_populations"],
-        counts_layer=config["ingest"]["counts_layer"],
+    inventory_path = output_root / "subtype_inventory.tsv"
+    coverage_path = output_root / "subtype_coverage.tsv"
+    eligibility_path = output_root / "subtype_eligibility.tsv"
+    counts_path = output_root / "subtype_pseudobulk_counts.tsv.gz"
+    inventory_checkpoints = (
+        inventory_path,
+        coverage_path,
+        eligibility_path,
+        counts_path,
     )
-    eligibility = classify_subtype_eligibility(
-        coverage,
-        inventory,
-        min_primary=int(settings["min_primary_cells_per_library"]),
-        min_sensitivity=int(settings["min_sensitivity_cells_per_library"]),
-        min_confident_fraction=float(settings["min_confident_identity_fraction"]),
-    )
-    inventory.to_csv(output_root / "subtype_inventory.tsv", sep="\t", index=False)
-    coverage.to_csv(output_root / "subtype_coverage.tsv", sep="\t", index=False)
-    eligibility.to_csv(output_root / "subtype_eligibility.tsv", sep="\t", index=False)
-    sensitivity = coverage.merge(
-        eligibility[["broad_population", "subtype", "eligibility", "reason"]],
-        on=["broad_population", "subtype"],
-        how="left",
-    )
-    sensitivity.to_csv(output_root / "subtype_sensitivity.tsv", sep="\t", index=False)
-    counts.to_csv(output_root / "subtype_pseudobulk_counts.tsv.gz", sep="\t", compression="gzip")
+    if all(path.exists() for path in inventory_checkpoints):
+        inventory = pd.read_csv(inventory_path, sep="\t")
+        coverage = pd.read_csv(coverage_path, sep="\t")
+        eligibility = pd.read_csv(eligibility_path, sep="\t")
+        counts = pd.read_csv(counts_path, sep="\t", index_col=[0, 1, 2])
+        counts.index.names = ["broad_population", "subtype", "library_id"]
+        logger.info("Reused audited Stage 3 inventory and pseudobulk checkpoint")
+    else:
+        inventory, coverage, counts = _inventory_and_counts(
+            h5ad_path,
+            settings["target_broad_populations"],
+            counts_layer=config["ingest"]["counts_layer"],
+        )
+        eligibility = classify_subtype_eligibility(
+            coverage,
+            inventory,
+            min_primary=int(settings["min_primary_cells_per_library"]),
+            min_sensitivity=int(settings["min_sensitivity_cells_per_library"]),
+            min_confident_fraction=float(settings["min_confident_identity_fraction"]),
+        )
+        inventory.to_csv(inventory_path, sep="\t", index=False)
+        coverage.to_csv(coverage_path, sep="\t", index=False)
+        eligibility.to_csv(eligibility_path, sep="\t", index=False)
+        sensitivity = coverage.merge(
+            eligibility[["broad_population", "subtype", "eligibility", "reason"]],
+            on=["broad_population", "subtype"],
+            how="left",
+        )
+        sensitivity.to_csv(output_root / "subtype_sensitivity.tsv", sep="\t", index=False)
+        counts.to_csv(counts_path, sep="\t", compression="gzip")
 
     primary = eligibility[eligibility["eligibility"].eq("Primary_DE_ready")]
-    de_frames: list[pd.DataFrame] = []
-    audits: list[pd.DataFrame] = []
-    for row in primary.itertuples(index=False):
-        logger.info("Unified subtype DE: %s", row.subtype)
-        subtype_counts = counts.loc[(row.broad_population, row.subtype)]
-        de, audit = _fit_subtype_model(
-            row.subtype,
-            row.broad_population,
-            subtype_counts,
-            min_count=int(settings["min_gene_count"]),
-            min_samples=int(settings["min_gene_samples"]),
-            n_cpus=int(settings["deseq_cpus"]),
+    de_path = output_root / "subtype_DE.tsv"
+    audit_path = output_root / "model_audit.tsv"
+    reversal_path = output_root / "subtype_reversal.tsv"
+    if all(path.exists() for path in (de_path, audit_path, reversal_path)):
+        subtype_de = pd.read_csv(de_path, sep="\t")
+        logger.info("Reused completed unified subtype DE checkpoint")
+    else:
+        de_frames: list[pd.DataFrame] = []
+        audits: list[pd.DataFrame] = []
+        for row in primary.itertuples(index=False):
+            logger.info("Unified subtype DE: %s", row.subtype)
+            subtype_counts = counts.loc[(row.broad_population, row.subtype)]
+            de, audit = _fit_subtype_model(
+                row.subtype,
+                row.broad_population,
+                subtype_counts,
+                min_count=int(settings["min_gene_count"]),
+                min_samples=int(settings["min_gene_samples"]),
+                n_cpus=int(settings["deseq_cpus"]),
+            )
+            de_frames.append(de)
+            audits.append(audit)
+        subtype_de = pd.concat(de_frames, ignore_index=True)
+        subtype_de.to_csv(de_path, sep="\t", index=False)
+        pd.concat(audits, ignore_index=True).to_csv(audit_path, sep="\t", index=False)
+        wide = subtype_de.pivot_table(
+            index=["broad_population", "subtype", "gene"],
+            columns="contrast",
+            values=["log2FoldChange", "padj", "stat"],
+            aggfunc="first",
         )
-        de_frames.append(de)
-        audits.append(audit)
-    subtype_de = pd.concat(de_frames, ignore_index=True)
-    subtype_de.to_csv(output_root / "subtype_DE.tsv", sep="\t", index=False)
-    pd.concat(audits, ignore_index=True).to_csv(
-        output_root / "model_audit.tsv", sep="\t", index=False
-    )
-
-    wide = subtype_de.pivot_table(
-        index=["broad_population", "subtype", "gene"],
-        columns="contrast",
-        values=["log2FoldChange", "padj", "stat"],
-        aggfunc="first",
-    )
-    wide.columns = [f"{contrast}_{metric}" for metric, contrast in wide.columns]
-    wide = wide.reset_index()
-    wide["aging_effect"] = wide["OC_vs_Y_log2FoldChange"]
-    wide["treatment_effect"] = wide["OT_vs_OC_log2FoldChange"]
-    wide["residual_effect"] = wide["OT_vs_Y_log2FoldChange"]
-    wide["direction_opposite"] = (
-        np.sign(wide["aging_effect"]) == -np.sign(wide["treatment_effect"])
-    )
-    wide["residual_closer_to_y"] = wide["residual_effect"].abs() < wide["aging_effect"].abs()
-    wide.to_csv(output_root / "subtype_reversal.tsv", sep="\t", index=False)
+        wide.columns = [f"{contrast}_{metric}" for metric, contrast in wide.columns]
+        wide = wide.reset_index()
+        wide["aging_effect"] = wide["OC_vs_Y_log2FoldChange"]
+        wide["treatment_effect"] = wide["OT_vs_OC_log2FoldChange"]
+        wide["residual_effect"] = wide["OT_vs_Y_log2FoldChange"]
+        wide["direction_opposite"] = (
+            np.sign(wide["aging_effect"]) == -np.sign(wide["treatment_effect"])
+        )
+        wide["residual_closer_to_y"] = (
+            wide["residual_effect"].abs() < wide["aging_effect"].abs()
+        )
+        wide.to_csv(reversal_path, sep="\t", index=False)
 
     gmt_path = paths["root"] / "resources" / "gene_sets" / "mh.all.v2026.1.Mm.symbols.gmt"
     gene_sets = parse_gmt(gmt_path)
@@ -760,9 +785,16 @@ def run_stage3(
     mapping = pd.read_csv(
         paths["results"] / "pathway_stage2" / "gene_identifier_mapping.tsv", sep="\t"
     )
+    hallmark_path = output_root / "subtype_hallmark.tsv"
+    resolution_path = output_root / "duplicate_symbol_resolution.tsv"
     hallmark = pd.DataFrame()
     resolution = pd.DataFrame()
-    if not skip_gsea:
+    if not skip_gsea and hallmark_path.exists() and hallmark_path.stat().st_size > 100:
+        hallmark = pd.read_csv(hallmark_path, sep="\t")
+        if resolution_path.exists() and resolution_path.stat().st_size > 0:
+            resolution = pd.read_csv(resolution_path, sep="\t")
+        logger.info("Reused completed subtype GSEA checkpoint")
+    elif not skip_gsea:
         hallmark, resolution = _run_gsea_grid(
             subtype_de,
             mapping,
@@ -775,8 +807,8 @@ def run_stage3(
             seed=int(settings.get("random_seed", GSEA_SEED)),
             logger=logger,
         )
-    hallmark.to_csv(output_root / "subtype_hallmark.tsv", sep="\t", index=False)
-    resolution.to_csv(output_root / "duplicate_symbol_resolution.tsv", sep="\t", index=False)
+        hallmark.to_csv(hallmark_path, sep="\t", index=False)
+        resolution.to_csv(resolution_path, sep="\t", index=False)
     broad_evidence = pd.read_csv(
         paths["results"] / "pathway_stage2" / "hallmark_pathway_evidence.tsv", sep="\t"
     )
@@ -804,7 +836,8 @@ def run_stage3(
             if row.broad_population in predefined.index
         ]
         with ProcessPoolExecutor(
-            max_workers=min(int(settings["model_workers"]), len(primary_rows))
+            max_workers=min(int(settings["model_workers"]), len(primary_rows)),
+            mp_context=mp.get_context("spawn"),
         ) as executor:
             for row in primary_rows:
                 subtype_counts = counts.loc[(row.broad_population, row.subtype)]
