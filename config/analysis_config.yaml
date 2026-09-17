@@ -219,3 +219,15 @@ stage3_subtype_localization:
   gsea_min_size: 15
   gsea_max_size: 500
   random_seed: 20260917
+
+stage4_composition_decomposition:
+  input_object: results/06_annotation_v2.h5ad
+  stage3_dir: results/stage3_subtype_localization
+  output_dir: results/stage4_composition_decomposition
+  figure_dir: figures/stage4_composition_decomposition
+  broad_populations: [Granulosa, Stromal_fibroblast]
+  composition_analysis_sets: [tier1_plus_tier2, tier1_only]
+  primary_composition_set: tier1_plus_tier2
+  clr_pseudocount_cells: 0.5
+  expression_target_sum: 10000
+  random_seed: 20260917
