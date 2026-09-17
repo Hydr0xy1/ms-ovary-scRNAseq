@@ -1,8 +1,8 @@
 """Stage 8: balanced, lineage-specific non-negative matrix factorization."""
+# ruff: noqa: E501
 
 from __future__ import annotations
 
-import hashlib
 import json
 from importlib.metadata import version
 from pathlib import Path
@@ -18,7 +18,6 @@ from sklearn.decomposition import NMF
 from .pathway_stage2 import parse_gmt
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import activity_contrasts, sha256_file
-
 
 POPULATIONS = ("Granulosa", "Stromal_fibroblast")
 K_GRID = (5, 8, 10, 12, 15)

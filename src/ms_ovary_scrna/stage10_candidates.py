@@ -1,4 +1,5 @@
 """Stage 10: transparent evidence-matrix mechanism candidate prioritization."""
+# ruff: noqa: E501
 
 from __future__ import annotations
 

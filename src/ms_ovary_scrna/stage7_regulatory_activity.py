@@ -5,6 +5,7 @@ pseudobulk log-CPM matrices.  TF messenger-RNA abundance is never used as a prox
 TF activity.  Formal OC/OT label sensitivity uses the same 20 exact assignments as
 Stage 1.6.
 """
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -20,7 +21,6 @@ import pandas as pd
 from .de_stage1_6 import enumerate_permutation_assignments
 from .project import project_paths, setup_logging
 from .stage5_rejuvenation_geometry import log_cpm
-
 
 PRIMARY_BROAD = ("Granulosa", "Stromal_fibroblast")
 

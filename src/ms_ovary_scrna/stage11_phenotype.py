@@ -1,4 +1,5 @@
 """Stage 11: prospective phenotype validation framework (no fabricated correlations)."""
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -9,7 +10,6 @@ import pandas as pd
 
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import sha256_file
-
 
 PROGRAM_ASSAYS = [
     ("OXIDATIVE_PHOSPHORYLATION|ROS_PATHWAY", "oxidative stress / mitochondria", "ROS;MDA;T-AOC;SOD;GSH-Px;ATP;MMP", "biochemical assay plus tissue/cell localization"),

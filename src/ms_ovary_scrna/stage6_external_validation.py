@@ -1,4 +1,5 @@
 """Stage 6: independent signature-level validation with GSE232309."""
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -15,7 +16,6 @@ from .de_stage1 import prefilter_genes
 from .pathway_stage2 import parse_gmt
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import sha256_file
-
 
 REFERENCE = {
     "title": "A single-cell atlas of the aging mouse ovary",
@@ -166,7 +166,13 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
         result = _run_external_deseq(counts, metadata)
         result.insert(0, "population", population)
         signatures.append(result)
-        internal = pd.read_csv(results_path := paths["results"] / "de_stage1_5" / population / "rescue_ready_effects.tsv.gz", sep="\t")
+        internal = pd.read_csv(
+            paths["results"]
+            / "de_stage1_5"
+            / population
+            / "rescue_ready_effects.tsv.gz",
+            sep="\t",
+        )
         joined = internal[["gene", "aging_effect", "treatment_effect", "residual_effect", "aging_padj", "treatment_padj"]].merge(result, on="gene", how="inner")
         metrics = signature_concordance(joined.set_index("gene")["aging_effect"], joined.set_index("gene")["external_aging_log2FC"])
         concordance_rows.append({"population": population, "scope": "all_overlapping_tested_genes", **metrics, "external_reference": REFERENCE["GEO"]})

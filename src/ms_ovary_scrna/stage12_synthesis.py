@@ -1,4 +1,5 @@
 """Stage 12: final auditable synthesis of all advanced-analysis stages."""
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -7,7 +8,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Mapping
 
-import numpy as np
 import pandas as pd
 
 from .project import project_paths, setup_logging

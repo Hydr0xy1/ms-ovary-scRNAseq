@@ -4,6 +4,7 @@ This module deliberately avoids a global all-cell-type network.  It is gated by 
 evidence, uses the LIANA mouse consensus ligand-receptor resource, and asks whether
 CytoSig ligand-response targets explain the pre-existing Granulosa reversal genes.
 """
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -17,7 +18,6 @@ import pandas as pd
 
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import _read_counts, sha256_file
-
 
 SENDER = "Stromal_fibroblast"
 RECEIVER = "Granulosa"
