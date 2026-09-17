@@ -13,7 +13,13 @@ population <- args[[2]]
 output_dir <- args[[3]]
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-obj <- readRDS(gzfile(input))
+# GEO stores these files as an outer .gz archive around an already
+# gzip-compressed RDS stream.  A second gzip connection is therefore needed;
+# reading only gzfile(input) leaves the inner gzip header for readRDS and
+# produces "unknown input format".
+input_connection <- gzcon(gzfile(input, open = "rb"))
+on.exit(close(input_connection), add = TRUE)
+obj <- readRDS(input_connection)
 metadata <- obj[[]]
 if (nrow(metadata) == 0) stop("Seurat metadata is empty")
 
