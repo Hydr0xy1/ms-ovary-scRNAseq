@@ -114,7 +114,12 @@ def _abundance_inventory(paths: Mapping[str, Path]) -> pd.DataFrame:
     qc = pd.read_csv(paths["results"] / "pseudobulk_ready" / "pseudobulk_qc.tsv", sep="\t")
     population_col = "population" if "population" in qc.columns else "cell_type_broad_v2"
     selected = qc.loc[qc[population_col].astype(str).isin([SENDER, RECEIVER])].copy()
-    selected = selected.rename(columns={population_col: "population"})
+    rename_columns = {population_col: "population"}
+    if "library_id" not in selected.columns and "library" in selected.columns:
+        rename_columns["library"] = "library_id"
+    if "detected_genes" not in selected.columns and "n_expressed_genes" in selected.columns:
+        rename_columns["n_expressed_genes"] = "detected_genes"
+    selected = selected.rename(columns=rename_columns)
     keep = [c for c in ["population", "library_id", "group", "n_cells", "total_umi", "detected_genes"] if c in selected.columns]
     selected = selected[keep]
     if "group" not in selected and "library_id" in selected:
