@@ -73,7 +73,7 @@ def run_stage12(config: Mapping[str, Any]) -> None:
     results = paths["results"]
     output_root = results / "stage12_final_synthesis"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage12_final_synthesis.log")
+    logger = setup_logging("21_stage12_final_synthesis", dict(config))
     status = _stage_status(results)
     critical = status.loc[status["stage"].isin([3, 4, 5, 10])]
     if not critical["status"].eq("COMPLETE").all():

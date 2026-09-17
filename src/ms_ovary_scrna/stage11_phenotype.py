@@ -43,7 +43,7 @@ def run_stage11(config: Mapping[str, Any]) -> None:
     paths = project_paths(config)
     output_root = paths["results"] / "stage11_phenotype_framework"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage11_phenotype_framework.log")
+    logger = setup_logging("20_stage11_phenotype_framework", dict(config))
     pathway_path = paths["results"] / "stage10_candidates" / "candidate_pathway_evidence.tsv"
     pathways = pd.read_csv(pathway_path, sep="\t")
     map_rows: list[dict[str, Any]] = []

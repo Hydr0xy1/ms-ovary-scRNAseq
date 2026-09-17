@@ -127,7 +127,7 @@ def run_stage10(config: Mapping[str, Any]) -> None:
     paths = project_paths(config)
     output_root = paths["results"] / "stage10_candidates"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage10_candidates.log")
+    logger = setup_logging("19_stage10_candidates", dict(config))
     stage1_6 = paths["results"] / "de_stage1_6"
     populations = sorted(p.name for p in stage1_6.iterdir() if p.is_dir() and (p / "observed_evidence_levels.tsv.gz").exists())
     leading = _leading_edge_map(paths["results"] / "pathway_stage2" / "hallmark_leading_edge_review.tsv")

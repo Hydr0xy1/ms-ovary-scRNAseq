@@ -129,7 +129,7 @@ def run_stage9(config: Mapping[str, Any], *, refresh_resources: bool = False) ->
     paths = project_paths(config)
     output_root = paths["results"] / "stage9_communication"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage9_communication.log")
+    logger = setup_logging("18_stage9_communication", dict(config))
     evidence = pd.read_csv(
         paths["results"] / "pathway_stage2" / "primary_pathway_reversal_summary.tsv", sep="\t"
     )

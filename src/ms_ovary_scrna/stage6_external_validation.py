@@ -140,7 +140,7 @@ def run_stage6(config: Mapping[str, Any], *, rscript: str) -> None:
     paths = project_paths(config)
     output_root = paths["results"] / "stage6_external_validation"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage6_external_validation.log")
+    logger = setup_logging("15_stage6_external_validation", dict(config))
     data_root = paths["root"] / "external_data" / "GSE232309"
     files = {
         "Granulosa": data_root / "GSE232309_Granulosa_Cells.rds.gz",

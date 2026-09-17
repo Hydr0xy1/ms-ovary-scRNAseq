@@ -269,7 +269,7 @@ def run_stage8(
     paths = project_paths(config)
     output_root = paths["results"] / "stage8_gene_programs"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage8_gene_programs.log")
+    logger = setup_logging("17_stage8_gene_programs", dict(config))
     seed = int(config.get("project", {}).get("random_seed", 20260810))
     h5ad_path = paths["results"] / "06_annotation_v2.h5ad"
     predicted_gib = estimate_dense_gib(9 * max_cells_per_library, n_hvg)

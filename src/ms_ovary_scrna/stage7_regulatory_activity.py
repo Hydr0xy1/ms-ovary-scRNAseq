@@ -260,7 +260,7 @@ def run_stage7(config: Mapping[str, Any], *, refresh_resources: bool = False) ->
     paths = project_paths(config)
     output_root = paths["results"] / "stage7_regulatory_activity"
     output_root.mkdir(parents=True, exist_ok=True)
-    logger = setup_logging(paths["logs"] / "stage7_regulatory_activity.log")
+    logger = setup_logging("16_stage7_regulatory_activity", dict(config))
     collectri, progeny, provenance = _load_or_fetch_networks(
         output_root / "resources", refresh=refresh_resources
     )
