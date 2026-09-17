@@ -22,6 +22,7 @@ from .stage7_regulatory_activity import _read_counts, sha256_file
 SENDER = "Stromal_fibroblast"
 RECEIVER = "Granulosa"
 CPM_EXPRESSION_THRESHOLD = 1.0
+CYTOSIG_TARGET_QUANTILE = 0.95
 
 
 def communication_gate(pathway_evidence: pd.DataFrame) -> tuple[bool, str]:
@@ -51,6 +52,31 @@ def _cpm(counts: pd.DataFrame) -> pd.DataFrame:
 
 def _split_complex(value: str) -> list[str]:
     return [part for part in str(value).split("_") if part]
+
+
+def filter_cytosig_targets(
+    cytosig: pd.DataFrame,
+    quantile: float = CYTOSIG_TARGET_QUANTILE,
+) -> pd.DataFrame:
+    """Keep each ligand's strongest CytoSig response weights before overlap tests."""
+    required = {"ligand_key", "score"}
+    missing = required.difference(cytosig.columns)
+    if missing:
+        raise KeyError(f"CytoSig table missing columns: {sorted(missing)}")
+    result = cytosig.copy()
+    result["abs_score"] = result["score"].abs()
+    thresholds = result.groupby("ligand_key", observed=True)["abs_score"].transform(
+        lambda values: values.quantile(quantile)
+    )
+    return result.loc[result["abs_score"].ge(thresholds)].copy()
+
+
+def select_candidate_ligands(candidates: pd.DataFrame, min_targets: int = 5) -> pd.DataFrame:
+    """Apply the predefined sender-pattern and receiver-target evidence gate."""
+    return candidates.loc[
+        candidates["sender_directional_rescue_candidate"].fillna(False).astype(bool)
+        & candidates["n_supported_receiver_targets"].ge(min_targets)
+    ].copy()
 
 
 def complex_expression_support(cpm: pd.DataFrame, complex_name: str) -> tuple[bool, float, str]:
@@ -182,6 +208,7 @@ def run_stage9(config: Mapping[str, Any], *, refresh_resources: bool = False) ->
     cyto = cytosig.copy()
     cyto["ligand_key"] = cyto["cytokine_genesymbol"].astype(str).str.upper()
     cyto["target_gene"] = cyto["genesymbol"].astype(str)
+    cyto = filter_cytosig_targets(cyto)
     cyto = cyto.loc[cyto["target_gene"].isin(target_set)]
     target_rows: list[pd.DataFrame] = []
     ligand_rows: list[dict[str, Any]] = []
@@ -219,7 +246,7 @@ def run_stage9(config: Mapping[str, Any], *, refresh_resources: bool = False) ->
     candidates = pd.DataFrame(ligand_rows)
     if candidates.empty:
         raise RuntimeError("No CytoSig-supported ligands overlap receiver reversal targets")
-    candidates = candidates.loc[candidates["n_supported_receiver_targets"].ge(5)].sort_values(
+    candidates = select_candidate_ligands(candidates, min_targets=5).sort_values(
         ["sender_directional_rescue_candidate", "n_stage2_leading_edge_targets", "n_supported_receiver_targets", "ligand"],
         ascending=[False, False, False, True],
         kind="stable",
@@ -244,7 +271,7 @@ def run_stage9(config: Mapping[str, Any], *, refresh_resources: bool = False) ->
         f"本阶段只因“{gate_reason}”而进入，预先限定 Stromal_fibroblast → Granulosa；没有运行全局网络后挑选故事。",
         "",
         "## 2. 输入与方法",
-        "LIANA mouseconsensus用于配体-受体配对；sender/receiver表达支持来自各library raw-count pseudobulk CPM，复合物要求所有亚基中位数≥1 CPM。CytoSig作为ligand-response靶基因资源，检验候选配体能否覆盖Stage1.5已有Granulosa reversal genes及Stage2 leading-edge genes。",
+        f"LIANA mouseconsensus用于配体-受体配对；sender/receiver表达支持来自各library raw-count pseudobulk CPM，复合物要求所有亚基中位数≥1 CPM。CytoSig作为ligand-response靶基因资源，预先保留每个配体绝对响应权重top {(1 - CYTOSIG_TARGET_QUANTILE) * 100:.0f}%，再检验是否覆盖Stage1.5已有Granulosa reversal genes及Stage2 leading-edge genes。候选配体还必须在sender自身表现为aging–treatment方向反转。",
         "",
         "## 3. 丰度混杂检查",
         "sender_receiver_inventory.tsv并列报告每个library的sender/receiver细胞数与相对丰度。候选interaction不能脱离细胞丰度变化单独解释。",

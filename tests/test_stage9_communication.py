@@ -6,6 +6,8 @@ from ms_ovary_scrna.stage9_communication import (
     _abundance_inventory,
     communication_gate,
     complex_expression_support,
+    filter_cytosig_targets,
+    select_candidate_ligands,
 )
 
 
@@ -46,3 +48,27 @@ def test_abundance_inventory_maps_existing_qc_schema(tmp_path) -> None:
     assert inventory["group"].tolist() == ["Y", "Y"]
     assert inventory["detected_genes"].tolist() == [1000, 900]
     assert inventory["fraction_within_sender_receiver"].tolist() == [0.6, 0.4]
+
+
+def test_cytosig_filter_is_applied_within_each_ligand() -> None:
+    resource = pd.DataFrame(
+        {
+            "ligand_key": ["A", "A", "A", "B", "B", "B"],
+            "score": [0.1, -0.5, 0.2, 1.0, 3.0, -2.0],
+        }
+    )
+    filtered = filter_cytosig_targets(resource, quantile=0.5)
+    assert filtered.groupby("ligand_key").size().to_dict() == {"A": 2, "B": 2}
+    assert filtered["abs_score"].min() >= 0.2
+
+
+def test_candidate_ligands_require_sender_reversal_and_target_support() -> None:
+    candidates = pd.DataFrame(
+        {
+            "ligand": ["keep", "wrong_sender", "too_few_targets"],
+            "sender_directional_rescue_candidate": [True, False, True],
+            "n_supported_receiver_targets": [6, 20, 4],
+        }
+    )
+    selected = select_candidate_ligands(candidates)
+    assert selected["ligand"].tolist() == ["keep"]
