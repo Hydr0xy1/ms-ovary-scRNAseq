@@ -21,6 +21,7 @@ from .stage7_regulatory_activity import activity_contrasts, sha256_file
 
 POPULATIONS = ("Granulosa", "Stromal_fibroblast")
 K_GRID = (5, 8, 10, 12, 15)
+TIER1_LABEL = "Tier1_primary"
 
 
 def estimate_dense_gib(n_cells: int, n_genes: int, n_copies: int = 4) -> float:
@@ -120,7 +121,10 @@ def _balanced_counts(
     if missing:
         raise KeyError(f"Missing required obs columns: {sorted(missing)}")
     obs = source.obs[["library_id", "cell_type_broad_v2", "analysis_tier_v2"]].copy()
-    eligible = obs["cell_type_broad_v2"].astype(str).eq(population) & obs["analysis_tier_v2"].astype(str).eq("Tier1")
+    eligible = (
+        obs["cell_type_broad_v2"].astype(str).eq(population)
+        & obs["analysis_tier_v2"].astype(str).eq(TIER1_LABEL)
+    )
     selected: list[int] = []
     sampling_rows: list[dict[str, Any]] = []
     libraries = ["Y_1", "Y_2", "Y_3", "OC_1", "OC_2", "OC_3", "OT_1", "OT_2", "OT_3"]
