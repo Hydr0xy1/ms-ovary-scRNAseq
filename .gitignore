@@ -24,6 +24,7 @@ secrets*
 
 # Single-cell inputs and large binary objects
 data/
+external_data/
 *.h5ad
 *.h5
 *.loom
@@ -36,6 +37,8 @@ figures/
 logs/
 tmp/
 cache/
+*.bundle
+wget-log
 
 # Operating-system files
 .DS_Store
