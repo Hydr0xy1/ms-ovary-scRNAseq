@@ -34,9 +34,29 @@ def sha256_file(path: str | Path) -> str:
 
 
 def _read_counts(path: Path) -> pd.DataFrame:
-    counts = pd.read_csv(path, sep="\t", index_col=[0, 1], compression="infer")
+    table = pd.read_csv(path, sep="\t", compression="infer")
+    if {"population", "library"}.issubset(table.columns):
+        population_column, library_column = "population", "library"
+    elif {"subtype", "library_id"}.issubset(table.columns):
+        population_column, library_column = "subtype", "library_id"
+    else:
+        raise ValueError(f"Unrecognized pseudobulk schema in {path}: {table.columns[:5].tolist()}")
+    metadata_columns = [
+        column
+        for column in ["population", "library", "broad_population", "subtype", "library_id"]
+        if column in table.columns
+    ]
+    counts = table.drop(columns=metadata_columns)
+    counts = counts.apply(pd.to_numeric, errors="raise")
     counts.index = pd.MultiIndex.from_tuples(
-        [(str(a), str(b)) for a, b in counts.index], names=["population", "library_id"]
+        list(
+            zip(
+                table[population_column].astype(str),
+                table[library_column].astype(str),
+                strict=True,
+            )
+        ),
+        names=["population", "library_id"],
     )
     if (counts.to_numpy() < 0).any():
         raise ValueError(f"Negative pseudobulk counts in {path}")
