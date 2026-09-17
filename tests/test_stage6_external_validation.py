@@ -3,7 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ms_ovary_scrna.stage6_external_validation import prepare_external_pseudobulk_counts, signature_concordance
+from ms_ovary_scrna.stage6_external_validation import (
+    prepare_external_pseudobulk_counts,
+    signature_concordance,
+)
 
 
 def test_signature_concordance_identical_vectors() -> None:
