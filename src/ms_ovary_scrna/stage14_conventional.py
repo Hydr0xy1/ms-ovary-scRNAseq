@@ -904,16 +904,21 @@ def _marker_rows_for_labels(
 
     labels = labels.astype(str).reset_index(drop=True)
     parent_values = parent_labels.astype(str).reset_index(drop=True) if parent_labels is not None else None
-    rows: list[dict[str, Any]] = []
-    for label in sorted(labels.unique()):
-        in_mask = labels.eq(label).to_numpy()
+    rows: list[pd.DataFrame] = []
+    if parent_values is None:
+        label_pairs = [("", label) for label in sorted(labels.unique())]
+    else:
+        label_pairs = sorted(
+            set(zip(parent_values.astype(str), labels.astype(str), strict=False))
+        )
+    for parent, label in label_pairs:
         if parent_values is None:
+            in_mask = labels.eq(label).to_numpy()
             universe_mask = np.ones(len(labels), dtype=bool)
         else:
-            parents = parent_values[in_mask].unique()
-            if len(parents) != 1:
-                raise ValueError(f"Subtype {label} maps to {len(parents)} parents")
-            universe_mask = parent_values.eq(parents[0]).to_numpy()
+            parent_mask = parent_values.eq(parent).to_numpy()
+            in_mask = parent_mask & labels.eq(label).to_numpy()
+            universe_mask = parent_mask
         out_mask = universe_mask & ~in_mask
         if not in_mask.any() or not out_mask.any():
             continue
@@ -953,6 +958,7 @@ def _marker_rows_for_labels(
             "descriptive one-vs-rest ranking; cells are not biological replicates",
         )
         keep.insert(0, "label", label)
+        keep.insert(0, "parent_label", parent)
         keep["n_cells_in"] = int(in_mask.sum())
         keep["n_cells_out"] = int(out_mask.sum())
         keep["comparison_scope"] = "all_other_broad_types" if parent_values is None else "other_subtypes_within_parent_broad"
@@ -1939,7 +1945,7 @@ def run_stage14(config: Mapping[str, Any], *, allow_low_memory: bool = False) ->
         symbols,
         broad_canonical,
         top_n=int(settings["marker_top_n"]),
-    ).rename(columns={"label": "cell_type"})
+    ).drop(columns="parent_label").rename(columns={"label": "cell_type"})
     broad_markers.insert(1, "subtype", "")
     subtype_markers = _marker_rows_for_labels(
         marker_matrix,
@@ -1949,17 +1955,11 @@ def run_stage14(config: Mapping[str, Any], *, allow_low_memory: bool = False) ->
         top_n=int(settings["marker_top_n"]),
         parent_labels=broad_labels,
     ).rename(columns={"label": "subtype"})
-    subtype_parent = (
-        pd.DataFrame({"subtype": subtype_labels, "cell_type": broad_labels})
-        .drop_duplicates()
-        .groupby("subtype", observed=True)["cell_type"]
-        .agg(lambda values: ";".join(sorted(set(values))))
-    )
-    subtype_markers.insert(0, "cell_type", subtype_markers["subtype"].map(subtype_parent))
+    subtype_markers = subtype_markers.rename(columns={"parent_label": "cell_type"})
     if broad_markers.duplicated(["cell_type", "gene"]).any():
         raise AssertionError("Broad marker catalogue contains duplicate cell-type/gene rows")
-    if subtype_markers.duplicated(["subtype", "gene"]).any():
-        raise AssertionError("Subtype marker catalogue contains duplicate subtype/gene rows")
+    if subtype_markers.duplicated(["cell_type", "subtype", "gene"]).any():
+        raise AssertionError("Subtype marker catalogue contains duplicate parent/subtype/gene rows")
     _write_tsv(broad_markers, marker_root / "broad_cell_marker_catalogue.tsv")
     _write_tsv(subtype_markers, marker_root / "subtype_marker_catalogue.tsv")
     for parent, filename in [

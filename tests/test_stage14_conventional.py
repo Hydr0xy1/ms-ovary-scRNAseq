@@ -125,6 +125,31 @@ def test_marker_catalogue_is_unique_per_label_gene() -> None:
     assert set(markers.loc[markers["canonical_marker_flag"], "gene"]) == {"GeneA", "GeneB"}
 
 
+def test_reused_subtype_name_is_scoped_to_parent_broad_type() -> None:
+    matrix = sparse.csr_matrix(
+        np.array(
+            [
+                [4.0, 0.0],
+                [0.0, 2.0],
+                [0.0, 4.0],
+                [2.0, 0.0],
+            ]
+        )
+    )
+    result = _marker_rows_for_labels(
+        matrix,
+        pd.Series(["Shared", "Other", "Shared", "Other"]),
+        np.array(["GeneA", "GeneB"]),
+        {},
+        top_n=1,
+        parent_labels=pd.Series(["Parent1", "Parent1", "Parent2", "Parent2"]),
+    )
+    assert set(result.loc[result["label"].eq("Shared"), "parent_label"]) == {
+        "Parent1",
+        "Parent2",
+    }
+
+
 def test_de_visualization_source_preserves_na_padj_and_lfc() -> None:
     table = pd.DataFrame(
         {
