@@ -24,7 +24,6 @@ import pandas as pd
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import sha256_file
 
-
 GROUP_COLORS = {"Y": "#0072B2", "OC": "#D55E00", "OT": "#009E73"}
 CELL_TYPE_COLORS = {
     "Granulosa": "#E69F00",
