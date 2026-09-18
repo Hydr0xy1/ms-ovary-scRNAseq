@@ -294,3 +294,14 @@ stage14_conventional:
   go_redundancy_max_terms_per_context: 500
   figure_formats: [svg, pdf, png]
   png_dpi: 600
+
+deep_dive_stage15:
+  # Independent workspace for the long-range biological deep-dive. Existing
+  # Stage 1-14 objects are read-only inputs and are never overwritten.
+  input_object: results/06_annotation_v2.h5ad
+  output_dir: results/deep_dive_stage15
+  broad_key: cell_type_broad_v2
+  subtype_key: cell_type_subtype_v2
+  tier_key: analysis_tier_v2
+  focus_populations: [Granulosa, Stromal_fibroblast]
+  min_primary_cells_per_library: 50
