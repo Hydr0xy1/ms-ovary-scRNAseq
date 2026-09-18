@@ -274,7 +274,9 @@ stage14_conventional:
   secondary_populations:
     [Immune, Ovarian_epithelial, Smooth_muscle_pericyte]
   exploratory_populations: [Theca_steroidogenic, Vascular_endothelial]
-  enrichment_contrasts: [OC_vs_Y, OT_vs_OC, OT_vs_Y]
+  # High-cost enrichment is prioritized for the primary aging and treatment
+  # questions; OT_vs_Y remains an optional descriptive contrast for a later run.
+  enrichment_contrasts: [OC_vs_Y, OT_vs_OC]
   primary_figure_contrasts: [OC_vs_Y, OT_vs_OC]
   gsea_permutations: 10000
   gsea_min_size: 15

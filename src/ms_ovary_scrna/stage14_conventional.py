@@ -1612,6 +1612,7 @@ def _write_reports(
     audit: pd.DataFrame,
     abundance_summary: pd.DataFrame,
     functional_summary: pd.DataFrame,
+    enrichment_contrasts: Sequence[str],
     cell_cycle_interpretation: pd.DataFrame,
     broad_markers: pd.DataFrame,
     subtype_markers: pd.DataFrame,
@@ -1626,6 +1627,14 @@ def _write_reports(
     ].iloc[0]
     discordant = int(functional_summary["hallmark_alignment"].eq("discordant_direction").sum())
     supported_functional = int(len(functional_summary))
+    deferred_contrasts = [contrast for contrast in ("OT_vs_Y",) if contrast not in enrichment_contrasts]
+    enrichment_scope = ", ".join(enrichment_contrasts)
+    deferred_note = (
+        "；".join(deferred_contrasts) + " 作为可选描述性对比暂未纳入本轮高成本10,000-permutation GSEA/ORA，"
+        "不影响主要 aging/treatment 问题。"
+        if deferred_contrasts
+        else "所有配置的富集对比均已执行。"
+    )
     report = f"""# Stage 14 常规 scRNA-seq 完整性报告
 
 ## 1 为什么进行 Stage 14
@@ -1653,6 +1662,8 @@ QC、Harmony、UMAP/Leiden、broad/local annotation、统一9-library DE、exact
 分母为同一library内Stromal总数。最大描述性变化为：{stromal_change}。Immune补充结果为：{immune_change}。
 
 ## 7 GO Biological Process
+
+本轮高成本功能富集执行对比：{enrichment_scope}。{deferred_note}
 
 使用Mouse MSigDB {MSIGDB_RELEASE} GO BP、统一模型Wald statistic、全部finite tested genes、10,000 permutations。Granulosa aging：{_format_top_terms(functional_summary, 'GO_BP', 'Granulosa', 'OC_vs_Y')}。Stromal aging：{_format_top_terms(functional_summary, 'GO_BP', 'Stromal_fibroblast', 'OC_vs_Y')}。GO显著term另按gene-set Jaccard聚类，避免把高度重叠term当成独立机制。
 
@@ -2153,6 +2164,7 @@ def run_stage14(config: Mapping[str, Any], *, allow_low_memory: bool = False) ->
         audit,
         abundance_summary,
         functional_summary,
+        contrasts,
         cycle_interpretation,
         broad_markers,
         subtype_markers,
@@ -2187,6 +2199,8 @@ def run_stage14(config: Mapping[str, Any], *, allow_low_memory: bool = False) ->
         "statistical_unit": "library",
         "n_libraries_per_group": 3,
         "gsea_permutations": int(settings["gsea_permutations"]),
+        "enrichment_contrasts": contrasts,
+        "optional_contrast_deferred": "OT_vs_Y" if "OT_vs_Y" not in contrasts else None,
         "n_standalone_plots": len(figure_manifest),
         "assembled_multipanel_figures": 0,
         "n_broad_marker_rows": len(broad_markers),
