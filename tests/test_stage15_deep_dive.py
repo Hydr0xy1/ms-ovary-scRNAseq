@@ -11,7 +11,8 @@ def test_stage15_missingness_marks_unknown_and_todo() -> None:
     result = _missingness(table, ["batch", "estrous_stage", "pool_mouse_ids"])
     assert result.set_index("field").loc["batch", "n_missing"] == 1
     assert result.set_index("field").loc["estrous_stage", "n_missing"] == 2
-    assert result.set_index("field").loc["pool_mouse_ids", "present"] is False
+    # pandas may return numpy.bool_, so test truth value rather than Python identity.
+    assert not bool(result.set_index("field").loc["pool_mouse_ids", "present"])
 
 
 def test_stage15_log_cpm_is_row_normalized_and_finite() -> None:
