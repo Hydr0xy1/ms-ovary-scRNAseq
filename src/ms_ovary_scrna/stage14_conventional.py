@@ -12,7 +12,6 @@ from __future__ import annotations
 import gc
 import hashlib
 import json
-import math
 import re
 import subprocess
 import urllib.request
@@ -29,7 +28,7 @@ from scipy import sparse
 from scipy.stats import hypergeom
 
 from .de_stage1_5 import ALL_LIBRARIES
-from .pathway_stage2 import POPULATION_TIERS, POPULATIONS, deduplicate_rank_table, parse_gmt
+from .pathway_stage2 import POPULATION_TIERS, deduplicate_rank_table, parse_gmt
 from .project import load_yaml, project_paths, require_compute_resources, setup_logging
 from .stage13_publication import (
     CELL_TYPE_COLORS,
@@ -2243,7 +2242,6 @@ def print_stage14_summary(config: Mapping[str, Any]) -> None:
     abundance = _read_tsv(output_root / "abundance" / "abundance_summary.tsv")
     functional = _read_tsv(output_root / "enrichment" / "functional_enrichment_summary.tsv")
     cycle = _read_tsv(output_root / "cell_cycle" / "cell_cycle_interpretation.tsv")
-    audit = _read_tsv(output_root / "CONVENTIONAL_ANALYSIS_AUDIT.tsv")
     cell_cycle_text = cycle.loc[cycle["evidence_type"].eq("integrated_interpretation"), "interpretation"].iloc[0]
     broad = _format_change_rows(abundance, "whole_ovary", n=2)
     granulosa = _format_change_rows(abundance, "Granulosa", n=2)
