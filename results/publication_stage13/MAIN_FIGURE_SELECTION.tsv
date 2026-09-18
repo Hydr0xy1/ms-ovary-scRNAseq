@@ -1,0 +1,29 @@
+figure_number	panel	scientific_question	source_file	why_selected	needs_regeneration	regeneration_reason	rendered_as_standalone	assembled_figure_created
+1	A	What was the experimental design?	planned schematic only	Essential context; no composite was rendered in Stage 13.	True	Create as a separate schematic after manuscript design is fixed.	False	False
+1	B	What cells make up the atlas?	figures/publication/atlas_umap_broad_cell_types.svg	Existing UMAP, fixed colors, broad identities.	False		True	False
+1	C	How do broad compositions vary by library?	figures/publication/atlas_library_composition.svg	Shows biological replicate structure without inferential overclaim.	False		True	False
+1	D	Which follicular states were resolved?	figures/publication/atlas_umap_granulosa_subtypes.svg	State-level atlas needed for later localization.	False		True	False
+1	E	Which stromal states were resolved?	figures/publication/atlas_umap_stromal_subtypes.svg	State-level atlas needed for the stromal mechanism line.	False		True	False
+2	A	Which populations remodel with aging?	figures/publication/aging_de_summary.svg	Library-level pseudobulk aging summary.	False		True	False
+2	B	Which aging pathways characterize Stromal?	figures/publication/pathway_reversal_stromal_fibroblast.svg	Contains the strongest program-level aging and treatment opposition.	False	Use aging points in Figure 2 and reuse the same standalone source in Figure 4 planning.	True	False
+2	C	Which aging pathways characterize Granulosa?	figures/publication/pathway_reversal_granulosa.svg	Provides the granulosa aging context before response interpretation.	False		True	False
+3	A	Are Granulosa aging and treatment effects opposed?	figures/publication/reversal_scatter_granulosa.svg	Direct gene-level effect comparison.	False		True	False
+3	B	Are Stromal aging and treatment effects opposed?	figures/publication/reversal_scatter_stromal_fibroblast.svg	Direct gene-level effect comparison.	False		True	False
+3	C	How specific is support across seven populations?	figures/publication/population_exact_permutation_evidence.svg	Displays negative populations alongside core populations.	False		True	False
+3	D	Does Granulosa shift toward young reference?	figures/publication/aging_axis_granulosa.svg	Cross-validated sample-level projection.	False		True	False
+3	E	Does Stromal shift toward young reference?	figures/publication/aging_axis_stromal_fibroblast.svg	Cross-validated sample-level projection.	False		True	False
+4	A	Where does stromal reversal localize?	figures/publication/subtype_localization_stromal_fibroblast.svg	Links broad evidence to supported stromal subtypes.	False		True	False
+4	B	Which stromal pathways reverse most strongly?	figures/publication/pathway_reversal_stromal_fibroblast.svg	Twelve strong multi-metric pathways.	False		True	False
+4	C	Does an external aging dataset support the pathway direction?	figures/publication/external_pathway_validation.svg	Independent aging context and visible discordance.	False		True	False
+4	D	Which stromal regulatory activities converge?	figures/publication/regulatory_candidates_stromal_fibroblast.svg	PI3K, Arnt, and Hoxa5 hypotheses.	False		True	False
+4	E	Do data-driven stromal programs reverse?	figures/publication/nmf_programs_stromal_fibroblast.svg	Independent co-expression program support.	False		True	False
+5	A	Where does Granulosa reversal localize?	figures/publication/subtype_localization_granulosa.svg	Antral/preantral state localization.	False		True	False
+5	B	Which Granulosa pathways are supported?	figures/publication/pathway_reversal_granulosa.svg	Separates the one strongest pathway from broader candidates.	False		True	False
+5	C	Is the aggregate shift compositional?	figures/publication/composition_intrinsic_decomposition.svg	Shows the within-subtype dominance with its model boundary.	False		True	False
+5	D	Does PI3K activity show a young-directed shift?	figures/publication/regulatory_candidates_granulosa.svg	Granulosa regulatory hypothesis.	False		True	False
+5	E	Do data-driven Granulosa programs reverse?	figures/publication/nmf_programs_granulosa.svg	Independent co-expression program support.	False		True	False
+6	A	Which stromal ligands are plausible?	figures/publication/communication_ligand_hypotheses.svg	Targeted four-ligand hypothesis display.	False	Title must retain hypothesis language.	True	False
+6	B	Which receptors and targets support each ligand?	results/stage9_communication/communication_evidence.tsv	Evidence table retained; a network cartoon could overstate causality.	True	Only render after manual choice of edges and explicit hypothesis labels.	False	False
+7	A	What evidence is supported versus hypothetical?	results/publication_stage13/MASTER_EVIDENCE_LEDGER.tsv	Evidence-level integrated model planned from the ledger.	True	Render only after experimental plan and manuscript claims are approved.	False	False
+7	B	Which candidates should be validated first?	figures/publication/candidate_tier_summary.svg	Transparent 60-candidate compression.	False		True	False
+7	C	Which functional assays close the evidence gap?	results/publication_stage13/EXPERIMENTAL_VALIDATION_PRIORITY_CN.md	No phenotype data exist, so this remains a validation design.	True	Replace with experimental results when available.	False	False

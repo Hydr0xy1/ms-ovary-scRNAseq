@@ -1,0 +1,18 @@
+supplement_number	category	content_scope
+S1	QC	Stage 1 QC and threshold sensitivity
+S2	Harmony/batch assessment	Integrated and unintegrated neighborhood diagnostics
+S3	Annotation markers	Broad marker validation and annotation audit
+S4	Follicular/steroidogenic annotation	Local cluster review and marker evidence
+S5	Other subclustering	Immune, endothelial, epithelial, and stromal reviews
+S6	Pseudobulk QC	Coverage and sample-level PCA
+S7	DE numerical audit	Unified model concordance and warnings
+S8	Permutation framework	All 20 assignments and seven populations
+S9	Hallmark full results	All pathway evidence and leading edges
+S10	Subtype readiness	Eligibility, sensitivity, and localization
+S11	Composition decomposition	Linear CPM Shapley diagnostics
+S12	Aging geometry	Leave-one-out and leave-pair-out sensitivity
+S13	External validation	Gene and pathway concordance including discordance
+S14	Regulatory activity	Full PROGENy and TF activity
+S15	NMF	K/seed stability and gene programs
+S16	Communication	Ligand, receptor, and target evidence
+S17	Negative and sensitivity results	Theca and other unsupported hypotheses

@@ -1,0 +1,23 @@
+registry	label	hex_color	meaning
+group	Y	#0072B2	4-month vehicle
+group	OC	#D55E00	10-month vehicle
+group	OT	#009E73	10-month MRJP1
+broad_cell_type	Granulosa	#E69F00	Granulosa
+broad_cell_type	Stromal_fibroblast	#56B4E9	Stromal_fibroblast
+broad_cell_type	Theca_steroidogenic	#CC79A7	Theca_steroidogenic
+broad_cell_type	Immune	#009E73	Immune
+broad_cell_type	Ovarian_epithelial	#F0E442	Ovarian_epithelial
+broad_cell_type	Smooth_muscle_pericyte	#0072B2	Smooth_muscle_pericyte
+broad_cell_type	Vascular_endothelial	#D55E00	Vascular_endothelial
+broad_cell_type	Lymphatic_endothelial	#8B6F47	Lymphatic_endothelial
+broad_cell_type	Ciliated_epithelial	#7F7F7F	Ciliated_epithelial
+broad_cell_type	Luteal_candidate	#A6761D	Luteal_candidate
+broad_cell_type	Uncertain	#C7C7C7	Uncertain
+subtype	Granulosa_antral_like	#E69F00	Granulosa_antral_like
+subtype	Granulosa_preantral_like	#F4A6C1	Granulosa_preantral_like
+subtype	Granulosa_cycling	#CC79A7	Granulosa_cycling
+subtype	Granulosa_atretic_like	#D55E00	Granulosa_atretic_like
+subtype	Granulosa_low_complexity_candidate	#BDBDBD	Granulosa_low_complexity_candidate
+subtype	ECM_high_candidate	#56B4E9	ECM_high_candidate
+subtype	Smooth_muscle_candidate	#0072B2	Smooth_muscle_candidate
+subtype	Stromal_fibroblast_candidate	#009E73	Stromal_fibroblast_candidate

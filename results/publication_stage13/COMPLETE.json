@@ -1,0 +1,29 @@
+{
+  "stage": 13,
+  "status": "COMPLETE",
+  "input_git_commit": "0890501ba1aac82a33ab1855e0f7e89df8f22ef5",
+  "n_existing_figures_inventoried": 223,
+  "n_standalone_publication_plots": 22,
+  "assembled_multipanel_figures_created": 0,
+  "figure_1_to_7_panel_planning_complete": true,
+  "n_candidate_cards": 60,
+  "tier_counts": {
+    "Tier C - exploratory": 35,
+    "Tier B - second priority": 16,
+    "Tier A - immediate validation": 9
+  },
+  "tier_a_candidates": [
+    "Il6st",
+    "Hif1a",
+    "Fn1",
+    "Tnc",
+    "Zfpm2",
+    "Prkdc",
+    "Bard1",
+    "Abi1",
+    "Abca1"
+  ],
+  "matched_phenotype_available": false,
+  "minimal_recomputation": "publication rendering only; no scientific result recomputed",
+  "manifest_sha256": "77499765e2a541d12271427595019727f5a721a9097d8b6dd1249f200a49152c"
+}
