@@ -58,12 +58,9 @@ RESOURCE_SPECS = {
         "release": MSIGDB_RELEASE,
     },
 }
-KEGG_URLS = {
-    "info": "https://rest.kegg.jp/info/kegg",
-    "pathways": "https://rest.kegg.jp/list/pathway/mmu",
-    "links": "https://rest.kegg.jp/link/mmu/pathway",
-    "genes": "https://rest.kegg.jp/list/mmu",
-}
+KEGG_ENRICHR_URL = (
+    "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=KEGG_2019_Mouse"
+)
 
 PRIMARY_CONTRAST_LABELS = {
     "OC_vs_Y": "Aging: OC versus Y",
@@ -306,65 +303,43 @@ def _download(url: str, path: Path) -> Path:
     return path
 
 
-def _download_text(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": "ms-ovary-scrna-stage14/1.0"})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return response.read().decode("utf-8")
+def _build_enrichr_mouse_kegg_gmt(
+    resource_dir: Path,
+    canonical_mouse_symbols: Sequence[str],
+) -> Path:
+    """Map the versioned Enrichr mouse KEGG library to audited mouse symbols."""
 
-
-def _build_kegg_mouse_gmt(resource_dir: Path) -> tuple[Path, str]:
-    """Build mouse-native KEGG sets directly from the official KEGG REST API."""
-
-    info = _download_text(KEGG_URLS["info"])
-    pathway_text = _download_text(KEGG_URLS["pathways"])
-    link_text = _download_text(KEGG_URLS["links"])
-    gene_text = _download_text(KEGG_URLS["genes"])
-    release_match = re.search(r"Release\s+([^\n]+)", info)
-    release = release_match.group(1).strip() if release_match else "KEGG release unavailable"
-
-    gene_symbols: dict[str, str] = {}
-    for line in gene_text.splitlines():
-        fields = line.split("\t")
-        if len(fields) < 2:
-            continue
-        gene_id, description = fields[0], fields[-1]
-        if ";" not in description:
-            continue
-        symbol_part = description.split(";", 1)[0]
-        symbol = symbol_part.split(",", 1)[0].strip()
-        if symbol:
-            gene_symbols[gene_id] = symbol
-
-    pathway_names: dict[str, str] = {}
-    for line in pathway_text.splitlines():
-        if not line.strip() or "\t" not in line:
-            continue
-        pathway_id, name = line.split("\t", 1)
-        pathway_names[pathway_id] = name.removesuffix(" - Mus musculus (house mouse)")
-
-    members: dict[str, set[str]] = defaultdict(set)
-    for line in link_text.splitlines():
-        if not line.strip() or "\t" not in line:
-            continue
-        pathway_id, gene_id = line.split("\t", 1)
-        symbol = gene_symbols.get(gene_id)
-        if symbol:
-            members[pathway_id].add(symbol)
-    output = resource_dir / "kegg_mouse_official_rest.gmt"
-    with output.open("w", encoding="utf-8", newline="\n") as handle:
-        for pathway_id in sorted(pathway_names):
-            genes = sorted(members.get(pathway_id, set()), key=str.upper)
-            if not genes:
-                continue
-            numeric = pathway_id.replace("path:mmu", "")
-            name = f"KEGG_MMU_{numeric}_{_safe_name(pathway_names[pathway_id]).upper()}"
-            handle.write("\t".join([name, f"https://www.kegg.jp/pathway/mmu{numeric}", *genes]) + "\n")
+    raw_path = resource_dir / "KEGG_2019_Mouse.enrichr.txt"
+    if not raw_path.exists():
+        _download(KEGG_ENRICHR_URL, raw_path)
+    candidates: dict[str, list[str]] = defaultdict(list)
+    for symbol in map(str, canonical_mouse_symbols):
+        candidates[symbol.upper()].append(symbol)
+    lookup = {key: values[0] for key, values in candidates.items() if len(set(values)) == 1}
+    output = resource_dir / "kegg_2019_mouse.canonical_symbols.gmt"
+    with raw_path.open(encoding="utf-8") as source, output.open(
+        "w", encoding="utf-8", newline="\n"
+    ) as handle:
+        for line_number, line in enumerate(source, start=1):
+            fields = line.rstrip("\r\n").split("\t")
+            if len(fields) < 2:
+                raise ValueError(f"Malformed Enrichr KEGG mouse line {line_number}")
+            name = "KEGG_MOUSE_2019_" + _safe_name(fields[0]).upper()
+            mapped = sorted(
+                {lookup[gene.strip().upper()] for gene in fields[1:] if gene.strip().upper() in lookup},
+                key=str.upper,
+            )
+            if mapped:
+                handle.write("\t".join([name, KEGG_ENRICHR_URL, *mapped]) + "\n")
     if len(parse_generic_gmt(output)) < 100:
-        raise RuntimeError("Official KEGG mouse download yielded fewer than 100 pathways")
-    return output, release
+        raise RuntimeError("KEGG_2019_Mouse yielded fewer than 100 mapped pathways")
+    return output
 
 
-def prepare_mouse_gene_sets(resource_dir: Path) -> tuple[dict[str, Path], pd.DataFrame]:
+def prepare_mouse_gene_sets(
+    resource_dir: Path,
+    canonical_mouse_symbols: Sequence[str],
+) -> tuple[dict[str, Path], pd.DataFrame]:
     """Download versioned mouse-native GO/Reactome and official KEGG mouse sets."""
 
     resource_dir.mkdir(parents=True, exist_ok=True)
@@ -391,26 +366,20 @@ def prepare_mouse_gene_sets(resource_dir: Path) -> tuple[dict[str, Path], pd.Dat
                 "n_gene_sets": len(gene_sets),
             }
         )
-    kegg_path = resource_dir / "kegg_mouse_official_rest.gmt"
-    release_path = resource_dir / "kegg_release.txt"
-    if not kegg_path.exists() or not release_path.exists():
-        kegg_path, kegg_release = _build_kegg_mouse_gmt(resource_dir)
-        release_path.write_text(kegg_release + "\n", encoding="utf-8")
-    else:
-        kegg_release = release_path.read_text(encoding="utf-8").strip()
+    kegg_path = _build_enrichr_mouse_kegg_gmt(resource_dir, canonical_mouse_symbols)
     paths["KEGG"] = kegg_path
     rows.append(
         {
             "database": "KEGG",
             "species": "Mus musculus",
-            "release_version": kegg_release,
-            "source": "KEGG REST mouse pathway-gene links",
-            "download_url": ";".join(KEGG_URLS.values()),
+            "release_version": "KEGG_2019_Mouse",
+            "source": "Enrichr KEGG 2019 Mouse library",
+            "download_url": KEGG_ENRICHR_URL,
             "download_date": date.today().isoformat(),
             "file_path": str(kegg_path),
             "sha256": sha256_file(kegg_path),
-            "gene_id_type": "KEGG mmu gene mapped to official mouse gene symbol",
-            "mapping_rule": "KEGG mouse gene identifier to first official symbol; no human ortholog conversion",
+            "gene_id_type": "mouse gene symbol",
+            "mapping_rule": "case-insensitive exact lookup to audited Cell Ranger canonical mouse symbols; no human ortholog conversion",
             "n_gene_sets": len(parse_generic_gmt(kegg_path)),
         }
     )
@@ -1687,7 +1656,7 @@ Granulosa treatment：{_format_top_terms(functional_summary, 'Reactome', 'Granul
 
 ## 9 KEGG
 
-KEGG gene sets来自官方KEGG REST的Mus musculus pathway-gene links，没有把mouse symbol大写后当human。Granulosa treatment：{_format_top_terms(functional_summary, 'KEGG', 'Granulosa', 'OT_vs_OC')}。Stromal treatment：{_format_top_terms(functional_summary, 'KEGG', 'Stromal_fibroblast', 'OT_vs_OC')}。
+KEGG gene sets来自版本明确的Enrichr `KEGG_2019_Mouse`集合；大写条目通过项目内经Cell Ranger/Ensembl审计的mouse canonical symbol表做case-insensitive exact mapping，没有转成人类同源基因。Granulosa treatment：{_format_top_terms(functional_summary, 'KEGG', 'Granulosa', 'OT_vs_OC')}。Stromal treatment：{_format_top_terms(functional_summary, 'KEGG', 'Stromal_fibroblast', 'OT_vs_OC')}。
 
 ## 10 GSEA 与 ORA 区别
 
@@ -2084,7 +2053,10 @@ def run_stage14(config: Mapping[str, Any], *, allow_low_memory: bool = False) ->
             )
 
     resource_dir = root / "resources" / "gene_sets" / "stage14"
-    resource_paths, provenance = prepare_mouse_gene_sets(resource_dir)
+    resource_paths, provenance = prepare_mouse_gene_sets(
+        resource_dir,
+        mapping.loc[mapping["valid_symbol"].astype(bool), "canonical_mouse_symbol"].astype(str).tolist(),
+    )
     provenance["file_path"] = provenance["file_path"].map(
         lambda value: str(Path(value).resolve().relative_to(root.resolve()))
     )
