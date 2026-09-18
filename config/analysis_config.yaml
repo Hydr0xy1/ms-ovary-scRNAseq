@@ -246,3 +246,14 @@ stage5_rejuvenation_geometry:
   n_pcs: 5
   normalization_target: 1000000
   random_seed: 20260917
+
+stage13_publication:
+  # Consolidation only: do not recompute integration, DE, GSEA, or annotations.
+  input_object: results/06_annotation_v2.h5ad
+  output_dir: results/publication_stage13
+  figure_dir: figures/publication
+  random_seed: 20260918
+  assembled_multipanel_figures: false
+  figure_formats: [svg, pdf, png]
+  png_dpi: 600
+  tier_b_limit: 16
