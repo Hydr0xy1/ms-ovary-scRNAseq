@@ -257,3 +257,36 @@ stage13_publication:
   figure_formats: [svg, pdf, png]
   png_dpi: 600
   tier_b_limit: 16
+
+stage14_conventional:
+  # Read-only conventional completeness stage. The annotated H5AD and all
+  # Stage 1-13 scientific results are inputs and are never overwritten.
+  input_object: results/06_annotation_v2.h5ad
+  output_dir: results/stage14_conventional
+  figure_dir: figures/stage14_conventional
+  counts_layer: counts
+  broad_key: cell_type_broad_v2
+  subtype_key: cell_type_subtype_v2
+  sample_key: library_id
+  group_key: group
+  tier_key: analysis_tier_v2
+  primary_populations: [Granulosa, Stromal_fibroblast]
+  secondary_populations:
+    [Immune, Ovarian_epithelial, Smooth_muscle_pericyte]
+  exploratory_populations: [Theca_steroidogenic, Vascular_endothelial]
+  enrichment_contrasts: [OC_vs_Y, OT_vs_OC, OT_vs_Y]
+  primary_figure_contrasts: [OC_vs_Y, OT_vs_OC]
+  gsea_permutations: 10000
+  gsea_min_size: 15
+  gsea_max_size: 500
+  gsea_workers: 4
+  gsea_threads_per_worker: 2
+  random_seed: 20260918
+  marker_top_n: 50
+  deg_top_n: 20
+  deg_fdr: 0.05
+  deg_effect_size_sensitivity: 0.5
+  go_redundancy_jaccard: 0.25
+  go_redundancy_max_terms_per_context: 500
+  figure_formats: [svg, pdf, png]
+  png_dpi: 600
