@@ -305,3 +305,8 @@ deep_dive_stage15:
   tier_key: analysis_tier_v2
   focus_populations: [Granulosa, Stromal_fibroblast]
   min_primary_cells_per_library: 50
+  counts_layer: counts
+  state_modules_file: resources/gene_sets/deep_dive_state_modules.yaml
+  state_min_genes: 3
+  state_min_cells_per_library: 30
+  external_program_top_n_each_direction: 150

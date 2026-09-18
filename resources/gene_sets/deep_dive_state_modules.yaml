@@ -1,0 +1,22 @@
+p53_p21_cell_cycle_arrest:
+  [Trp53, Cdkn1a, Mdm2, Gadd45a, Gadd45b, Bbc3, Rprm, Rb1, E2f1]
+p16_related:
+  [Cdkn2a, Cdkn2b, Rb1, Ets1, Ets2, Sp1]
+DNA_damage_response:
+  [H2afx, Atm, Atr, Chek1, Chek2, Brca1, Brca2, Rad51, Gadd45a, Mdm2]
+SASP_inflammation:
+  [Il6, Il1b, Tnf, Ccl2, Cxcl1, Cxcl2, Serpine1, Igfbp3, Igfbp7, Mmp3, Mmp9]
+apoptosis:
+  [Bax, Bcl2l11, Bbc3, Pmaip1, Casp3, Casp7, Casp9, Apaf1, Cycs]
+mitochondria_OXPHOS:
+  [Ppargc1a, Tfam, Nrf1, Polg, Sirt1, Sirt3, Ucp2, Cox4i1, Atp5f1a, Ndufs1, Ndufv1]
+ROS_antioxidant:
+  [Nfe2l2, Keap1, Hmox1, Nqo1, Sod1, Sod2, Cat, Gpx1, Gpx4, Txnrd1, Prdx1]
+follicle_maturation:
+  [Fshr, Foxl2, Amh, Inha, Inhbb, Kitl, Gja1, Hsd17b1, Cyp19a1]
+atresia:
+  [Bax, Casp3, Ddit3, Atf4, Jun, Fos, Pik3ip1, Itih5, Ghr]
+steroidogenesis:
+  [Star, Cyp11a1, Cyp17a1, Hsd3b1, Hsd17b1, Cyp19a1, Lhcgr, Scarb1, Nr5a1]
+ECM_fibrosis:
+  [Col1a1, Col1a2, Col3a1, Fn1, Dcn, Lum, Tgfb1, Tgfbr1, Tgfbr2, Serpine1, Acta2, Lox, Mmp2, Timp1]
