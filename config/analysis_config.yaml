@@ -279,7 +279,9 @@ stage14_conventional:
   gsea_permutations: 10000
   gsea_min_size: 15
   gsea_max_size: 500
-  gsea_workers: 4
+  # Two workers keep the 62-GiB container below its memory ceiling while
+  # retaining two threads per worker for the expensive all-set permutations.
+  gsea_workers: 2
   gsea_threads_per_worker: 2
   random_seed: 20260918
   marker_top_n: 50
