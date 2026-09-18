@@ -9,19 +9,17 @@ annotation, or clustering.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
 from .project import project_paths, setup_logging
 from .stage7_regulatory_activity import sha256_file
@@ -1824,4 +1822,3 @@ def run_stage13(config: Mapping[str, Any]) -> None:
     print("MAIN_FIGURE_SELECTION=results/publication_stage13/MAIN_FIGURE_SELECTION.tsv")
     print("RESULTS_FACT_SHEET_CN=results/publication_stage13/RESULTS_FACT_SHEET_CN.tsv")
     print(f"FINAL_GIT_COMMIT={_git_commit(paths['root'])}")
-

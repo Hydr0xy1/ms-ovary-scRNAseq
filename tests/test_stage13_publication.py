@@ -19,9 +19,35 @@ def _candidate_table() -> pd.DataFrame:
     for cell_type, gene in TIER_A_ANCHORS:
         rows.append((cell_type, gene, True, True, True, True, True, False, True, 0.001))
     for index in range(21):
-        rows.append(("Stromal_fibroblast", f"B{index:02d}", True, True, True, True, index % 3 == 0, index % 4 == 0, index % 2 == 0, 0.01 + index / 1000))
+        rows.append(
+            (
+                "Stromal_fibroblast",
+                f"B{index:02d}",
+                True,
+                True,
+                True,
+                True,
+                index % 3 == 0,
+                index % 4 == 0,
+                index % 2 == 0,
+                0.01 + index / 1000,
+            )
+        )
     for index in range(30):
-        rows.append(("Immune", f"C{index:02d}", False, True, True, True, False, False, False, 0.1 + index / 1000))
+        rows.append(
+            (
+                "Immune",
+                f"C{index:02d}",
+                False,
+                True,
+                True,
+                True,
+                False,
+                False,
+                False,
+                0.1 + index / 1000,
+            )
+        )
     return pd.DataFrame(
         rows,
         columns=[
