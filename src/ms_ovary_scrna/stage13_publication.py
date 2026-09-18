@@ -816,7 +816,7 @@ def _plot_umap(
             linewidths=0,
             alpha=0.75 if label != "Uncertain" else 0.25,
             c=colors.get(label, "#999999"),
-            label=label,
+            label=label.replace("_", " "),
             rasterized=True,
         )
     ax.set_xlabel("UMAP 1")
@@ -910,7 +910,12 @@ def _plot_reversal_scatter(table: pd.DataFrame, population: str, figure_root: Pa
     ax.set_xlabel("Aging effect, OC - Y (log2 FC)")
     ax.set_ylabel("Treatment effect, OT - OC (log2 FC)")
     ax.set_title(population.replace("_", " "), loc="left")
-    ax.legend(frameon=False, loc="best")
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+    )
     plot_id = f"reversal_scatter_{population.lower()}"
     return _save_plot(
         fig,
@@ -992,7 +997,12 @@ def _plot_pathway_reversal(table: pd.DataFrame, population: str, figure_root: Pa
     ax.set_xlabel("Normalized enrichment score")
     ax.set_ylabel("")
     ax.set_title(f"{population.replace('_', ' ')} pathway reversal", loc="left")
-    ax.legend(frameon=False, loc="best")
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+    )
     return _save_plot(
         fig,
         f"pathway_reversal_{population.lower()}",
@@ -1021,7 +1031,12 @@ def _plot_subtype_localization(table: pd.DataFrame, population: str, figure_root
     ax.set_xlabel("Subtype normalized enrichment score")
     ax.set_ylabel("")
     ax.set_title(f"{population.replace('_', ' ')} subtype localization", loc="left")
-    ax.legend(frameon=False, loc="best")
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+    )
     return _save_plot(
         fig,
         f"subtype_localization_{population.lower()}",
@@ -1037,16 +1052,33 @@ def _plot_subtype_localization(table: pd.DataFrame, population: str, figure_root
 def _plot_external_validation(table: pd.DataFrame, figure_root: Path, source_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     sub = table.copy().sort_values("external_aging_NES")
     supported = _as_bool(sub["external_internal_aging_same_direction"]) & _as_bool(sub["treatment_opposes_external_aging"])
+    stromal = sub["population"].eq("Stromal_fibroblast")
+    granulosa = sub["population"].eq("Granulosa")
+    sub["display_label"] = sub["pathway"].map(_clean_pathway) + np.where(
+        granulosa, " [Granulosa]", " [Stromal]"
+    )
     colors = np.where(supported, "#009E73", "#BDBDBD")
     fig, ax = _new_figure(4.6, 4.2)
     y = np.arange(len(sub))
     ax.scatter(sub["external_aging_NES"], y, color=colors, s=24)
     ax.axvline(0, color="#444444", linewidth=0.6)
-    ax.set_yticks(y, [_clean_pathway(value) for value in sub["pathway"]])
+    ax.set_yticks(y, sub["display_label"])
     ax.set_xlabel("External aging NES (GSE232309)")
     ax.set_ylabel("")
     ax.set_title("External validation of strong pathways", loc="left")
-    ax.text(0.99, 0.02, f"{int(supported.sum())}/{len(sub)} direction-consistent\nand treatment-opposed", transform=ax.transAxes, ha="right", va="bottom", fontsize=6)
+    ax.text(
+        0.99,
+        0.02,
+        (
+            f"Stromal: {int((supported & stromal).sum())}/{int(stromal.sum())}\n"
+            f"Granulosa: {int((supported & granulosa).sum())}/{int(granulosa.sum())}\n"
+            "direction-consistent and treatment-opposed"
+        ),
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6,
+    )
     return _save_plot(
         fig,
         "external_pathway_validation",
@@ -1081,7 +1113,12 @@ def _plot_regulators(table: pd.DataFrame, population: str, figure_root: Path, so
     ax.set_ylabel("Inferred activity")
     ax.set_xlabel("")
     ax.set_title(f"{population.replace('_', ' ')} regulatory candidates", loc="left")
-    ax.legend(frameon=False)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+    )
     return _save_plot(
         fig,
         f"regulatory_candidates_{population.lower()}",
@@ -1138,7 +1175,12 @@ def _plot_decomposition(table: pd.DataFrame, figure_root: Path, source_root: Pat
     ax.set_xlabel("Projection fraction of aggregate effect")
     ax.set_ylabel("")
     ax.set_title("Composition versus within-subtype expression", loc="left")
-    ax.legend(frameon=False)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+    )
     return _save_plot(
         fig,
         "composition_intrinsic_decomposition",
@@ -1187,10 +1229,12 @@ def _plot_candidate_tiers(cards: pd.DataFrame, figure_root: Path, source_root: P
         values = pivot[cell_type].to_numpy()
         ax.bar(pivot.index, values, bottom=bottom, color=CELL_TYPE_COLORS.get(cell_type, "#888888"), label=cell_type)
         bottom += values
+    ax.set_xticks(range(len(pivot)), ["Tier A", "Tier B", "Tier C"])
+    for x, total in enumerate(pivot.sum(axis=1)):
+        ax.text(x, total + 0.5, str(int(total)), ha="center", va="bottom", fontsize=6.5)
     ax.set_ylabel("Candidates")
     ax.set_xlabel("")
     ax.set_title("Transparent candidate triage", loc="left")
-    ax.tick_params(axis="x", rotation=20)
     ax.legend(frameon=False, bbox_to_anchor=(1.02, 0.5), loc="center left")
     return _save_plot(
         fig,
@@ -1807,7 +1851,10 @@ def run_stage13(config: Mapping[str, Any]) -> None:
     print("PUBLICATION_STAGE13_COMPLETE")
     print("========================================")
     print("FIGURE_1_TO_7_PANEL_PLANNING=complete")
-    print(f"MAIN_TEXT_STANDALONE_PLOTS={int(main_selection['rendered_as_standalone'].sum())}")
+    n_unique_main_plots = main_selection.loc[
+        main_selection["rendered_as_standalone"], "source_file"
+    ].nunique()
+    print(f"MAIN_TEXT_STANDALONE_PLOTS={n_unique_main_plots}")
     print(f"SUPPLEMENTARY_CANDIDATE_CATEGORIES={len(_supplement_plan())}")
     print(f"TIER_A_COUNT={len(tier_a_names)}")
     print("TIER_A_CANDIDATES=" + ",".join(tier_a_names))
