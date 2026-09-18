@@ -310,3 +310,11 @@ deep_dive_stage15:
   state_min_genes: 3
   state_min_cells_per_library: 30
   external_program_top_n_each_direction: 150
+  program_stability:
+    output_dir: results/deep_dive_stage15/program_stability
+    per_library_cells: 300
+    n_genes: 2000
+    k_values: [6, 8, 10]
+    seeds: [20260917, 20260918, 20260919]
+    max_iter: 300
+    top_genes: 50
