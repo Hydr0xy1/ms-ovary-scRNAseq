@@ -16,8 +16,18 @@ def main() -> None:
         default=None,
         help="Optional stage names for a checkpointed partial run",
     )
+    parser.add_argument(
+        "--force",
+        nargs="+",
+        default=None,
+        help="Re-run named stages even when their checkpoint is complete",
+    )
     args = parser.parse_args()
-    run_stage16_ml(load_config(args.config), selected_stages=args.stages)
+    run_stage16_ml(
+        load_config(args.config),
+        selected_stages=args.stages,
+        force_stages=args.force,
+    )
 
 
 if __name__ == "__main__":

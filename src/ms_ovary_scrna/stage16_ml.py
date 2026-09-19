@@ -222,7 +222,7 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
                 )
                 rows.append(
                     {
-                        "candidate_id": f"gene:{gene}",
+                        "candidate_id": f"gene:{population}:{gene}",
                         "candidate_type": "gene",
                         "population": population,
                         "source": "pseudobulk_DE_stage1_5",
@@ -244,7 +244,9 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
         for _, record in state.iterrows():
             rows.append(
                 {
-                    "candidate_id": f"state:{record.get('module', '')}",
+                    "candidate_id": (
+                        f"state:{record.get('population', '')}:{record.get('module', '')}"
+                    ),
                     "candidate_type": "state_module",
                     "population": record.get("population", ""),
                     "source": "stage15_state_exact_permutation",
@@ -354,17 +356,24 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
     for candidate_id, group in evidence.groupby("candidate_id", observed=True):
         sources = sorted(set(group["source"].astype(str)))
         effects = pd.to_numeric(group["treatment_effect"], errors="coerce").dropna()
-        signs = np.sign(effects.to_numpy()) if not effects.empty else np.array([])
-        n_negative = int((signs < 0).sum())
-        n_positive = int((signs > 0).sum())
-        if len(sources) >= 3 and n_negative > 0 and n_positive == 0:
+        source_support = (
+            group.assign(_support=group["directional_rescue"].astype(bool))
+            .groupby("source", observed=True)["_support"]
+            .mean()
+            .ge(0.5)
+        )
+        n_supporting = int(source_support.sum())
+        n_non_supporting = int((~source_support).sum())
+        if len(sources) >= 3 and n_supporting == len(sources):
             classification = "multi_evidence_stable_support"
-        elif len(sources) >= 2 and n_negative > n_positive:
+        elif len(sources) >= 2 and n_supporting > n_non_supporting:
             classification = "direction_support_but_robustness_incomplete"
-        elif n_negative > 0 and n_positive > 0:
+        elif len(sources) >= 2 and n_supporting > 0 and n_non_supporting > 0:
             classification = "direction_conflict"
-        else:
+        elif n_supporting > 0:
             classification = "single_method_support"
+        else:
+            classification = "no_directional_support"
         summary_rows.append(
             {
                 "candidate_id": candidate_id,
@@ -374,8 +383,8 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
                 "n_sources": len(sources),
                 "sources": ";".join(sources),
                 "median_treatment_effect": float(effects.median()) if not effects.empty else np.nan,
-                "n_negative_sources": n_negative,
-                "n_positive_sources": n_positive,
+                "n_supporting_sources": n_supporting,
+                "n_non_supporting_sources": n_non_supporting,
                 "classification": classification,
             }
         )
@@ -897,7 +906,9 @@ def _manifest(stage_root: Path) -> None:
 
 
 def run_stage16_ml(
-    config: Mapping[str, Any], selected_stages: Iterable[str] | None = None
+    config: Mapping[str, Any],
+    selected_stages: Iterable[str] | None = None,
+    force_stages: Iterable[str] | None = None,
 ) -> Path:
     stage_root, logger, paths = _init_stage(config)
     _update_run_state(stage_root, "initialization", "complete")
@@ -913,19 +924,23 @@ def run_stage16_ml(
         ("09_mechanism_candidates", run_mechanism_and_synthesis),
     ]
     selected = set(selected_stages) if selected_stages is not None else None
+    forced = set(force_stages or ())
+    known = {name for name, _ in stages}
     if selected is not None:
-        known = {name for name, _ in stages}
         unknown = sorted(selected - known)
         if unknown:
             raise ValueError(f"Unknown Stage16 stage names: {unknown}")
         stages = [(name, function) for name, function in stages if name in selected]
+    unknown_forced = sorted(forced - known)
+    if unknown_forced:
+        raise ValueError(f"Unknown forced Stage16 stage names: {unknown_forced}")
     state_path = stage_root / "RUN_STATE.json"
     for name, function in stages:
         # Resume safely: completed/skipped stages are immutable inputs for the
         # next stage and should not be retrained after an SSH/session restart.
         state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
         previous = state.get("stages", {}).get(name, {}).get("status")
-        if previous in {"complete", "skipped"}:
+        if previous in {"complete", "skipped"} and name not in forced:
             logger.info("Skipping already finished stage %s (%s)", name, previous)
             continue
         succeeded = False
@@ -954,7 +969,12 @@ def run_stage16_ml(
         print("STAGE16_22_PARTIAL_COMPLETE")
         print(f"OUTPUT={stage_root.relative_to(paths['root'])}")
         return stage_root
-    has_failures = (stage_root / "FAILED_STEPS.tsv").exists()
+    final_state = json.loads(state_path.read_text(encoding="utf-8"))
+    has_failures = any(
+        value.get("status") == "failed"
+        for key, value in final_state.get("stages", {}).items()
+        if key != "overall"
+    )
     _update_run_state(
         stage_root,
         "overall",
