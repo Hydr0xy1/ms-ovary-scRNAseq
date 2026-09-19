@@ -851,7 +851,9 @@ def _manifest(stage_root: Path) -> None:
     pd.DataFrame(rows).to_csv(stage_root / "RUN_MANIFEST.tsv", sep="\t", index=False)
 
 
-def run_stage16_ml(config: Mapping[str, Any]) -> Path:
+def run_stage16_ml(
+    config: Mapping[str, Any], selected_stages: Iterable[str] | None = None
+) -> Path:
     stage_root, logger, paths = _init_stage(config)
     _update_run_state(stage_root, "initialization", "complete")
     stages = [
@@ -865,6 +867,13 @@ def run_stage16_ml(config: Mapping[str, Any]) -> Path:
         ("07_foundation_models", run_foundation_and_cross_species),
         ("09_mechanism_candidates", run_mechanism_and_synthesis),
     ]
+    selected = set(selected_stages) if selected_stages is not None else None
+    if selected is not None:
+        known = {name for name, _ in stages}
+        unknown = sorted(selected - known)
+        if unknown:
+            raise ValueError(f"Unknown Stage16 stage names: {unknown}")
+        stages = [(name, function) for name, function in stages if name in selected]
     state_path = stage_root / "RUN_STATE.json"
     for name, function in stages:
         # Resume safely: completed/skipped stages are immutable inputs for the
@@ -889,6 +898,17 @@ def run_stage16_ml(config: Mapping[str, Any]) -> Path:
         if not succeeded:
             logger.error("Stage %s failed after one retry; continuing independent stages", name)
     _manifest(stage_root)
+    if selected is not None:
+        _update_run_state(
+            stage_root,
+            "overall",
+            "partial",
+            selected_stages=sorted(selected),
+            next_stage="resume_remaining_stages",
+        )
+        print("STAGE16_22_PARTIAL_COMPLETE")
+        print(f"OUTPUT={stage_root.relative_to(paths['root'])}")
+        return stage_root
     has_failures = (stage_root / "FAILED_STEPS.tsv").exists()
     _update_run_state(
         stage_root,
