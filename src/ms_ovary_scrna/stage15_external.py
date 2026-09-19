@@ -107,6 +107,32 @@ def _download(url: str, path: Path) -> None:
     raise RuntimeError(f"Download failed: {url}: {last_error}")
 
 
+def _validate_gzip(path: Path) -> None:
+    """Read a gzip file to EOF so truncated downloads cannot enter analysis."""
+
+    with gzip.open(path, "rb") as handle:
+        while handle.read(1024 * 1024):
+            pass
+
+
+def _validate_downloads(output_root: Path, registry: pd.DataFrame) -> None:
+    bad: list[str] = []
+    for row in registry.itertuples(index=False):
+        if row.age_group == "unknown":
+            continue
+        sample_root = output_root / "processed_10x" / str(row.sample_id)
+        for url in [row.matrix_url_1, row.matrix_url_2, row.matrix_url_3]:
+            if not url:
+                continue
+            path = sample_root / Path(url.split("/", 1)[-1]).name
+            try:
+                _validate_gzip(path)
+            except (OSError, EOFError, FileNotFoundError) as exc:
+                bad.append(f"{path}: {exc}")
+    if bad:
+        raise RuntimeError("Gzip integrity check failed:\n" + "\n".join(bad))
+
+
 def download_gse267729(output_root: Path, logger: Any) -> pd.DataFrame:
     registry_path = output_root / "GSE267729_sample_registry.tsv"
     registry = pd.read_csv(registry_path, sep="\t") if registry_path.exists() else fetch_registry(output_root)
@@ -159,7 +185,9 @@ def _read_external_10x(sample_root: Path) -> AnnData:
 def _score_labels(adata: AnnData, panels: Mapping[str, Mapping[str, list[str]]]) -> tuple[np.ndarray, pd.DataFrame]:
     totals = np.asarray(adata.X.sum(axis=1)).ravel().astype(float)
     totals[totals <= 0] = 1.0
-    x = adata.X.tocsr().multiply((1e4 / totals)[:, None])
+    # scipy's sparse multiply may return COO; normalize back to CSR before
+    # column indexing below.
+    x = adata.X.tocsr().multiply((1e4 / totals)[:, None]).tocsr()
     x.data = np.log1p(x.data)
     genes = pd.Index(adata.var_names.astype(str))
     scores: dict[str, np.ndarray] = {}
@@ -250,6 +278,7 @@ def run_stage15_external(config: Mapping[str, Any], *, download_only: bool = Fal
         (output_root / "CHECKPOINT.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
         print("STAGE15_EXTERNAL_DOWNLOAD_COMPLETE")
         return output_root
+    _validate_downloads(output_root, registry)
     counts, metadata = _sample_pseudobulk(output_root, registry, root / config["project"]["marker_file"], logger)
     programs = _age_programs(output_root, counts, metadata)
     status = {"status": "EXTERNAL_PROGRAMS_COMPLETE", "n_samples": int(registry["sample_id"].nunique()), "n_pseudobulk_rows": int(len(counts)), "n_program_rows": int(len(programs)), "program_definition": "external-only log2CPM age contrasts; no internal OT data used for selection", "next_stage": "internal_projection_and_composition_state_decomposition", "completed_at_utc": datetime.now(timezone.utc).isoformat()}
