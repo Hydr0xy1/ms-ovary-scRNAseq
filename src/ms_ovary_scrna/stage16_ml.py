@@ -171,24 +171,69 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
     for population in FOCUS:
         de = _read_tsv(root / f"results/de_stage1_5/{population}/unified_all_genes.tsv.gz")
         if not de.empty:
-            if "treatment_padj" in de.columns:
-                de["_rank"] = de["treatment_padj"].fillna(1).rank(method="first")
-            elif "treatment_effect" in de.columns:
-                de["_rank"] = (-de["treatment_effect"].abs()).rank(method="first")
-            selected = de.sort_values("_rank").head(300)
-            for _, record in selected.iterrows():
+            effect_col = next(
+                (
+                    column
+                    for column in ("log2FC_shrunk", "log2FC_raw", "log2FoldChange")
+                    if column in de.columns
+                ),
+                None,
+            )
+            if effect_col is None or not {"gene", "contrast"}.issubset(de.columns):
+                continue
+            effects = de.pivot_table(
+                index="gene", columns="contrast", values=effect_col, aggfunc="first"
+            )
+            padj = de.pivot_table(
+                index="gene", columns="contrast", values="padj", aggfunc="first"
+            )
+            treatment = de.loc[de["contrast"].astype(str).eq("OT_vs_OC")].copy()
+            treatment["_padj_rank"] = pd.to_numeric(
+                treatment.get("padj"), errors="coerce"
+            ).fillna(1.0)
+            treatment["_abs_effect"] = pd.to_numeric(
+                treatment[effect_col], errors="coerce"
+            ).abs()
+            selected_genes = (
+                treatment.sort_values(
+                    ["_padj_rank", "_abs_effect"], ascending=[True, False]
+                )["gene"]
+                .astype(str)
+                .drop_duplicates()
+                .head(300)
+            )
+            for gene in selected_genes:
+                aging_effect = _safe_float(
+                    effects.at[gene, "OC_vs_Y"] if "OC_vs_Y" in effects else np.nan
+                )
+                treatment_effect = _safe_float(
+                    effects.at[gene, "OT_vs_OC"] if "OT_vs_OC" in effects else np.nan
+                )
+                residual_effect = _safe_float(
+                    effects.at[gene, "OT_vs_Y"] if "OT_vs_Y" in effects else np.nan
+                )
+                treatment_padj = _safe_float(
+                    padj.at[gene, "OT_vs_OC"] if "OT_vs_OC" in padj else np.nan
+                )
+                directional_rescue = bool(
+                    np.isfinite(aging_effect)
+                    and np.isfinite(treatment_effect)
+                    and aging_effect * treatment_effect < 0
+                )
                 rows.append(
                     {
-                        "candidate_id": f"gene:{record.get('gene', '')}",
+                        "candidate_id": f"gene:{gene}",
                         "candidate_type": "gene",
                         "population": population,
                         "source": "pseudobulk_DE_stage1_5",
-                        "aging_effect": _safe_float(record.get("aging_effect")),
-                        "treatment_effect": _safe_float(record.get("treatment_effect")),
-                        "residual_effect": _safe_float(record.get("residual_effect")),
-                        "treatment_padj": _safe_float(record.get("treatment_padj")),
-                        "directional_rescue": record.get("directional_rescue_candidate", False),
-                        "raw_label": record.get("primary_classification", ""),
+                        "aging_effect": aging_effect,
+                        "treatment_effect": treatment_effect,
+                        "residual_effect": residual_effect,
+                        "treatment_padj": treatment_padj,
+                        "directional_rescue": directional_rescue,
+                        "raw_label": "opposite_to_aging_direction"
+                        if directional_rescue
+                        else "not_directionally_reversed",
                     }
                 )
 
