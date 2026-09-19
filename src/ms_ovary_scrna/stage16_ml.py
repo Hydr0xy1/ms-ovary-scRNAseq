@@ -426,6 +426,13 @@ def _load_internal_subset(root: Path, config: Mapping[str, Any], population: str
             idx = rng.choice(idx, size=max_per_library, replace=False)
         selected.extend(idx.tolist())
     query = adata[selected, genes].to_memory()
+    counts_layer = str(config["deep_dive_stage15"].get("counts_layer", "counts"))
+    if counts_layer not in query.layers:
+        adata.file.close()
+        raise KeyError(f"raw count layer is required for scVI: {counts_layer}")
+    # scVI must receive integer UMI counts, not the normalized/log-transformed X
+    # retained by the annotated atlas.
+    query.X = query.layers[counts_layer].copy()
     query.obs = query.obs.copy()
     query.obs["dataset"] = "internal_MRJP1"
     query.obs["sample_id"] = query.obs["library_id"].astype(str).to_numpy()
@@ -447,7 +454,9 @@ def _external_marker_subset(path: Path, sample_meta: pd.DataFrame, genes: list[s
     s_markers = [g for g in ["Dcn", "Lum", "Col1a1", "Col3a1", "Col1a2", "Pdgfra"] if g in genes]
     blocks: list[ad.AnnData] = []
     rng = np.random.default_rng(20260919)
-    for _, meta in sample_meta.iterrows():
+    # The public metadata has one row per sample × inferred population.  Read
+    # each physical 10X library once for each modelled population.
+    for _, meta in sample_meta.drop_duplicates("sample_id").iterrows():
         sample_id = str(meta["sample_id"])
         sample_dir = path / sample_id
         matrices = list(sample_dir.glob("*_matrix.mtx.gz"))
@@ -564,7 +573,8 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
                 library_summary["seed"] = seed
                 latent_rows.append(library_summary)
                 model_rows.append({"population": population, "seed": seed, "n_public_cells": int(public.n_obs), "n_query_cells": int(query.n_obs), "n_genes": int(combined.n_vars), "n_latent": 10, "accelerator": "gpu" if use_gpu else "cpu", "model_dir": str(model_dir.relative_to(root))})
-                del model, combined, public, query
+                del model
+            del combined, public, query
         except Exception as exc:
             _record_failure(stage_root, f"03_scvi_reference_{population}", exc, logger)
             continue
@@ -697,7 +707,14 @@ def run_external_age_models(config: Mapping[str, Any], stage_root: Path, logger:
         contrast_program = programs.loc[(programs["population"] == population) & (programs["contrast"].eq("post_acyclic_vs_young"))] if not programs.empty else pd.DataFrame()
         features = contrast_program.sort_values("abs_effect", ascending=False)["gene"].astype(str).head(200).tolist() if not contrast_program.empty else c.columns[:200].astype(str).tolist()
         features = [g for g in features if g in c.columns]
-        X = c[features].to_numpy()
+        internal = broad_internal.get(population, pd.DataFrame())
+        if not internal.empty:
+            # Freeze one identical feature space for public training and
+            # internal projection; never silently predict with fewer columns.
+            features = [g for g in features if g in internal.columns]
+        if len(features) < 10:
+            continue
+        X = cpm[features].to_numpy()
         for model_name, estimator in [("ridge", Ridge(alpha=10.0)), ("elastic_net", ElasticNet(alpha=0.05, l1_ratio=0.2, max_iter=5000))]:
             preds = np.full(len(y), np.nan)
             for i in range(len(y)):
@@ -707,9 +724,8 @@ def run_external_age_models(config: Mapping[str, Any], stage_root: Path, logger:
                 loso_rows.append({"population": population, "model": model_name, "held_out_sample": pmeta.iloc[i]["sample_id"], "observed_age_months": y[i], "predicted_age_score": preds[i], "n_training_samples": int(train.sum())})
             rows.append({"population": population, "model": model_name, "n_external_samples": len(y), "n_features": len(features), "loso_mae_months": float(mean_absolute_error(y, preds)), "loso_r2": float(r2_score(y, preds)), "decision": "exploratory_only_single_public_study"})
             model = make_pipeline(StandardScaler(), estimator); model.fit(X, y)
-            internal = broad_internal.get(population, pd.DataFrame())
             if not internal.empty:
-                use = [g for g in features if g in internal.columns]
+                use = features
                 ipred = model.predict(np.log2(internal[use].div(internal[use].sum(axis=1), axis=0) * 1e6 + 0.5).to_numpy())
                 for library, score in zip(internal.index, ipred):
                     score_rows.append({"population": population, "model": model_name, "library_id": library, "group": str(library).split("_", 1)[0], "external_age_score": score, "n_features": len(use)})
@@ -748,7 +764,11 @@ def run_contrastivevi(config: Mapping[str, Any], stage_root: Path, logger: Any, 
             idx = full.obs_names.get_indexer(np.asarray(idx, dtype=str)); idx = idx[idx >= 0]
             selected.extend((rng.choice(idx, min(len(idx), 300), replace=False)).tolist())
         data = full[selected, genes].to_memory(); full.file.close()
-        data.layers["counts"] = data.X.copy() if sparse.issparse(data.X) else sparse.csr_matrix(data.X)
+        counts_layer = str(config["deep_dive_stage15"].get("counts_layer", "counts"))
+        if counts_layer not in data.layers:
+            raise KeyError(f"raw count layer is required for contrastiveVI: {counts_layer}")
+        if counts_layer != "counts":
+            data.layers["counts"] = data.layers[counts_layer].copy()
         model_rows = []; score_rows = []
         for seed in [20260919, 20260920, 20260921]:
             scvi.settings.seed = seed
