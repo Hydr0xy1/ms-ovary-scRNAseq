@@ -1981,6 +1981,19 @@ def run_foundation_and_cross_species(config: Mapping[str, Any], stage_root: Path
             payload = _ensembl_json(url)
             extracted = _extract_one_to_one_orthologs(payload, gene, release)
             if extracted:
+                for row in extracted:
+                    if (
+                        not row.get("human_gene")
+                        and row.get("human_ensembl_gene_id")
+                    ):
+                        lookup_url = (
+                            "https://rest.ensembl.org/lookup/id/"
+                            + urllib.parse.quote(
+                                str(row["human_ensembl_gene_id"])
+                            )
+                        )
+                        lookup = _ensembl_json(lookup_url)
+                        row["human_gene"] = lookup.get("display_name", "")
                 mapping_rows.extend(extracted)
             else:
                 mapping_rows.append(
