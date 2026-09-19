@@ -130,6 +130,8 @@ def _external_program_from_counts(
     excluded_sample: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     meta = ext_meta.loc[(ext_meta["population"] == population) & (ext_meta["n_cells"] >= threshold)].copy()
+    all_population_meta = ext_meta.loc[ext_meta["population"] == population].copy()
+    excluded_low = all_population_meta.loc[all_population_meta["n_cells"] < threshold, ["sample_id", "n_cells"]]
     if excluded_sample is not None:
         meta = meta.loc[meta["sample_id"].astype(str) != str(excluded_sample)].copy()
     if contrast == "peri_regular_vs_young":
@@ -143,7 +145,17 @@ def _external_program_from_counts(
     young = meta["age_group"] == "young"
     young_keys = meta.loc[young, "sample_id"].astype(str).tolist()
     aged_keys = meta.loc[aged, "sample_id"].astype(str).tolist()
-    rows: dict[str, Any] = {"n_external_young": len(young_keys), "n_external_aged": len(aged_keys), "external_young_cells": int(meta.loc[young, "n_cells"].sum()), "external_aged_cells": int(meta.loc[aged, "n_cells"].sum()), "external_sample_ids": ";".join(meta["sample_id"].astype(str))}
+    rows: dict[str, Any] = {
+        "n_external_young": len(young_keys),
+        "n_external_aged": len(aged_keys),
+        "external_young_cells": int(meta.loc[young, "n_cells"].sum()),
+        "external_aged_cells": int(meta.loc[aged, "n_cells"].sum()),
+        "external_sample_ids": ";".join(meta["sample_id"].astype(str)),
+        "excluded_low_cell_samples": ";".join(
+            f"{sample}:{int(n_cells)}" for sample, n_cells in excluded_low.itertuples(index=False, name=None)
+        ),
+        "n_excluded_low_cell_samples": int(len(excluded_low)),
+    }
     if len(young_keys) < 3 or len(aged_keys) < 3:
         return pd.DataFrame(), rows
     keys = [f"{x}::{population}" for x in young_keys + aged_keys]
@@ -562,6 +574,7 @@ def run_followup_validation(config: Mapping[str, Any]) -> Path:
         "Stromal方向敏感性摘要：",
         stromal_table_text,
         "本轮观察到 Stromal 各主要参照的年龄轴方向均为负，但 peri-regular/peri-irregular 的到Y距离变化为正；post-acyclic 在冻结程序下距离下降，但 n≥200 时缺少合格的 aged 外部样本，不能把该结果概括为稳定改善。",
+        "GSM8274690（Stromal_fibroblast，n_cells=18）在 n≥100 和 n≥200 两个阈值下均被排除；排除样本及其细胞数同时记录在 `STROMAL_EXTERNAL_SENSITIVITY.tsv`。",
         "",
         "## 状态模块精确置换",
         "",
