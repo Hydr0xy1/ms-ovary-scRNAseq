@@ -53,6 +53,7 @@ def main() -> None:
         genes,
         "Granulosa",
         max_per_sample=10,
+        min_common_genes=100,
     )
     query = _load_internal_subset(
         root, config, "Granulosa", genes, max_per_library=10

@@ -495,7 +495,14 @@ def _load_internal_subset(root: Path, config: Mapping[str, Any], population: str
     return query
 
 
-def _external_marker_subset(path: Path, sample_meta: pd.DataFrame, genes: list[str], population: str, max_per_sample: int = 200) -> ad.AnnData:
+def _external_marker_subset(
+    path: Path,
+    sample_meta: pd.DataFrame,
+    genes: list[str],
+    population: str,
+    max_per_sample: int = 200,
+    min_common_genes: int = 500,
+) -> ad.AnnData:
     """Read one public 10X sample at a time and keep marker-positive cells.
 
     The public GSE267729 metadata has sample-level cell counts but no per-cell
@@ -522,7 +529,7 @@ def _external_marker_subset(path: Path, sample_meta: pd.DataFrame, genes: list[s
         except Exception:
             continue
         common = [g for g in genes if g in block.var_names]
-        if len(common) < 500:
+        if len(common) < min_common_genes:
             continue
         total = np.asarray(block.X.sum(axis=1)).ravel().astype(float)
         total[total <= 0] = 1
