@@ -621,7 +621,12 @@ def _query_one_to_one_orthologs(
 ) -> tuple[list[dict[str, Any]], str]:
     """Query and resolve symbols, retrying transient Ensembl failures once."""
     params = urllib.parse.urlencode(
-        {"target_species": "homo_sapiens", "type": "orthologues"}
+        {
+            "target_species": "homo_sapiens",
+            "type": "orthologues",
+            "sequence": "none",
+            "aligned": "0",
+        }
     )
     url = (
         "https://rest.ensembl.org/homology/symbol/mus_musculus/"
@@ -632,7 +637,7 @@ def _query_one_to_one_orthologs(
     last_error = ""
     for _ in range(attempts):
         try:
-            payload = _ensembl_json(url)
+            payload = _ensembl_json(url, timeout=90)
             extracted = _extract_one_to_one_orthologs(
                 payload, mouse_symbol, release
             )
