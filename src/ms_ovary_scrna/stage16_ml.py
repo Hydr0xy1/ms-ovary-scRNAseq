@@ -616,6 +616,44 @@ def _extract_one_to_one_orthologs(
     return rows
 
 
+def _query_one_to_one_orthologs(
+    mouse_symbol: str, release: str, attempts: int = 2
+) -> tuple[list[dict[str, Any]], str]:
+    """Query and resolve symbols, retrying transient Ensembl failures once."""
+    params = urllib.parse.urlencode(
+        {"target_species": "homo_sapiens", "type": "orthologues"}
+    )
+    url = (
+        "https://rest.ensembl.org/homology/symbol/mus_musculus/"
+        + urllib.parse.quote(mouse_symbol)
+        + "?"
+        + params
+    )
+    last_error = ""
+    for _ in range(attempts):
+        try:
+            payload = _ensembl_json(url)
+            extracted = _extract_one_to_one_orthologs(
+                payload, mouse_symbol, release
+            )
+            for row in extracted:
+                if not row.get("human_gene") and row.get(
+                    "human_ensembl_gene_id"
+                ):
+                    lookup_url = (
+                        "https://rest.ensembl.org/lookup/id/"
+                        + urllib.parse.quote(
+                            str(row["human_ensembl_gene_id"])
+                        )
+                    )
+                    lookup = _ensembl_json(lookup_url)
+                    row["human_gene"] = lookup.get("display_name", "")
+            return extracted, ""
+        except Exception as exc:
+            last_error = f"query_failed:{type(exc).__name__}"
+    return [], last_error
+
+
 def run_external_registry(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
     out = stage_root / "02_external_registry"
     root = paths["root"]
@@ -1968,50 +2006,18 @@ def run_foundation_and_cross_species(config: Mapping[str, Any], stage_root: Path
         release = f"query_failed:{type(exc).__name__}"
     mapping_rows: list[dict[str, Any]] = []
     for gene in candidate_genes:
-        params = urllib.parse.urlencode(
-            {"target_species": "homo_sapiens", "type": "orthologues"}
-        )
-        url = (
-            "https://rest.ensembl.org/homology/symbol/mus_musculus/"
-            + urllib.parse.quote(gene)
-            + "?"
-            + params
-        )
-        try:
-            payload = _ensembl_json(url)
-            extracted = _extract_one_to_one_orthologs(payload, gene, release)
-            if extracted:
-                for row in extracted:
-                    if (
-                        not row.get("human_gene")
-                        and row.get("human_ensembl_gene_id")
-                    ):
-                        lookup_url = (
-                            "https://rest.ensembl.org/lookup/id/"
-                            + urllib.parse.quote(
-                                str(row["human_ensembl_gene_id"])
-                            )
-                        )
-                        lookup = _ensembl_json(lookup_url)
-                        row["human_gene"] = lookup.get("display_name", "")
-                mapping_rows.extend(extracted)
-            else:
-                mapping_rows.append(
-                    {
-                        "mouse_gene": gene,
-                        "human_gene": "",
-                        "homology_type": "",
-                        "mapping_status": "no_one_to_one_ortholog_returned",
-                        "ensembl_release": release,
-                    }
-                )
-        except Exception as exc:
+        extracted, query_error = _query_one_to_one_orthologs(gene, release)
+        if extracted:
+            mapping_rows.extend(extracted)
+        else:
             mapping_rows.append(
                 {
                     "mouse_gene": gene,
                     "human_gene": "",
                     "homology_type": "",
-                    "mapping_status": f"query_failed:{type(exc).__name__}",
+                    "mapping_status": (
+                        query_error or "no_one_to_one_ortholog_returned"
+                    ),
                     "ensembl_release": release,
                 }
             )
