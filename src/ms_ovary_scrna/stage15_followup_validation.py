@@ -376,6 +376,7 @@ def run_conditional_candidates(root: Path, stage_root: Path, output_root: Path, 
             trt = float(log.loc[[x for x in LIBRARIES if x.startswith("OT_")], tf].mean() - log.loc[[x for x in LIBRARIES if x.startswith("OC_")], tf].mean())
             oc_values = log.loc[[x for x in LIBRARIES if x.startswith("OC_")], tf]
             ot_values = log.loc[[x for x in LIBRARIES if x.startswith("OT_")], tf]
+            paired_diff = ot_values.to_numpy() - oc_values.to_numpy()
             tf_rows.append({
                 "candidate_tf": tf,
                 "contextual_target_markers": context.get(tf, {}).get("contextual_target_markers", "not directly inferred"),
@@ -385,7 +386,7 @@ def run_conditional_candidates(root: Path, stage_root: Path, output_root: Path, 
                 "OC_library_values": ";".join(f"{v:.4f}" for v in oc_values),
                 "OT_library_values": ";".join(f"{v:.4f}" for v in ot_values),
                 "treatment_direction_consistency": float(np.mean(ot_values.to_numpy() < oc_values.to_numpy())),
-                "single_library_sensitivity_range": float((ot_values - oc_values).max() - (ot_values - oc_values).min()),
+                "single_library_sensitivity_range": float(paired_diff.max() - paired_diff.min()),
                 "composition_context": "prior Stage 4 decomposition must be consulted; not re-estimated here",
                 "support_source": "existing_stage15_state/NMF/pseudobulk context; expression-level candidate only",
                 "mechanistic_status": "candidate_hypothesis_not_activity_proof",
