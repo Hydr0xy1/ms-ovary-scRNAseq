@@ -60,8 +60,21 @@ def read_metadata(config: dict[str, Any]) -> pd.DataFrame:
     return metadata
 
 
-def setup_logging(name: str, config: dict[str, Any]) -> logging.Logger:
+def setup_logging(
+    name: str,
+    config: dict[str, Any],
+    *,
+    output_dir: str | Path | None = None,
+) -> logging.Logger:
+    """Create a stage logger, optionally colocated with a stage output directory.
+
+    Existing stages keep the historical ``setup_logging(name, config)`` API.  A
+    follow-up stage may pass ``output_dir`` so its log is kept with its isolated
+    results without changing the project-wide log layout.
+    """
     paths = project_paths(config)
+    log_dir = Path(output_dir) if output_dir is not None else paths["logs"]
+    log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     if not logger.handlers:
@@ -69,7 +82,7 @@ def setup_logging(name: str, config: dict[str, Any]) -> logging.Logger:
         stream = logging.StreamHandler()
         stream.setFormatter(formatter)
         logger.addHandler(stream)
-        file_handler = logging.FileHandler(paths["logs"] / f"{name}.log")
+        file_handler = logging.FileHandler(log_dir / f"{name}.log")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     return logger
