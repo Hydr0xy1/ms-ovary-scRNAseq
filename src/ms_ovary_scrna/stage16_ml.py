@@ -942,6 +942,17 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
             query = _load_internal_subset(root, config, population, genes, max_per_library=200)
             if public.n_obs < 500 or query.n_obs < 500:
                 raise RuntimeError(f"insufficient cells for {population}: public={public.n_obs}, query={query.n_obs}")
+            # join='inner' also intersects observation annotations. Add an
+            # explicit public placeholder so that the query-only subtype label
+            # survives concatenation and can be used for internal geometry.
+            subtype_key = str(
+                config["deep_dive_stage15"].get("subtype_key", "")
+            )
+            if subtype_key:
+                if subtype_key not in public.obs:
+                    public.obs[subtype_key] = "not_available"
+                if subtype_key not in query.obs:
+                    query.obs[subtype_key] = "not_available"
             combined = ad.concat([public, query], join="inner", merge="same", index_unique=None)
             combined.layers["counts"] = combined.X.copy() if sparse.issparse(combined.X) else sparse.csr_matrix(combined.X)
             scvi.model.SCVI.setup_anndata(combined, layer="counts", batch_key="dataset")
@@ -969,7 +980,6 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
                 latent_df.insert(2, "dataset", combined.obs["dataset"].astype(str).to_numpy())
                 latent_df.insert(3, "group", combined.obs["group"].astype(str).to_numpy())
                 latent_df.insert(4, "seed", seed)
-                subtype_key = str(config["deep_dive_stage15"].get("subtype_key", ""))
                 subtype = (
                     combined.obs[subtype_key].astype(str).to_numpy()
                     if subtype_key in combined.obs
