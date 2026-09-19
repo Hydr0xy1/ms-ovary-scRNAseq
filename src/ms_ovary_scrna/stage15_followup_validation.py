@@ -338,7 +338,7 @@ def _cell_gene_support(adata: ad.AnnData, mask: np.ndarray, genes: Iterable[str]
     norm = block.multiply((1e4 / totals)[:, None]).tocsr()
     out: dict[str, tuple[float, float, int]] = {}
     for j, gene in enumerate(present):
-        vals = norm[:, j].toarray().ravel()
+        vals = np.log1p(norm[:, j].toarray().ravel())
         out[gene] = (float(vals.mean()), float((vals > 0).mean()), int(len(vals)))
     for gene in genes:
         out.setdefault(gene, (np.nan, np.nan, 0))
@@ -359,12 +359,37 @@ def run_conditional_candidates(root: Path, stage_root: Path, output_root: Path, 
     tf_rows: list[dict[str, Any]] = []
     if not broad.empty:
         log = _log_cpm(broad)
+        context = {
+            "Hif1a": {
+                "contextual_target_markers": "Hmox1;Nqo1;Vegfa",
+                "state_module_context": "DNA_damage_response;ROS_antioxidant",
+            },
+            "Smad3": {
+                "contextual_target_markers": "Tgfb1;Serpine1;Col1a1",
+                "state_module_context": "ECM_fibrosis;SASP_inflammation",
+            },
+        }
         for tf in tf_candidates:
             if tf not in log.columns:
                 continue
             age = float(log.loc[[x for x in LIBRARIES if x.startswith("OC_")], tf].mean() - log.loc[[x for x in LIBRARIES if x.startswith("Y_")], tf].mean())
             trt = float(log.loc[[x for x in LIBRARIES if x.startswith("OT_")], tf].mean() - log.loc[[x for x in LIBRARIES if x.startswith("OC_")], tf].mean())
-            tf_rows.append({"candidate_tf": tf, "age_effect_OC_minus_Y": age, "treatment_effect_OT_minus_OC": trt, "support_source": "existing_stage15_state/NMF/pseudobulk context; expression-level candidate only", "mechanistic_status": "candidate_hypothesis_not_activity_proof"})
+            oc_values = log.loc[[x for x in LIBRARIES if x.startswith("OC_")], tf]
+            ot_values = log.loc[[x for x in LIBRARIES if x.startswith("OT_")], tf]
+            tf_rows.append({
+                "candidate_tf": tf,
+                "contextual_target_markers": context.get(tf, {}).get("contextual_target_markers", "not directly inferred"),
+                "state_module_context": context.get(tf, {}).get("state_module_context", "not assigned"),
+                "age_effect_OC_minus_Y": age,
+                "treatment_effect_OT_minus_OC": trt,
+                "OC_library_values": ";".join(f"{v:.4f}" for v in oc_values),
+                "OT_library_values": ";".join(f"{v:.4f}" for v in ot_values),
+                "treatment_direction_consistency": float(np.mean(ot_values.to_numpy() < oc_values.to_numpy())),
+                "single_library_sensitivity_range": float((ot_values - oc_values).max() - (ot_values - oc_values).min()),
+                "composition_context": "prior Stage 4 decomposition must be consulted; not re-estimated here",
+                "support_source": "existing_stage15_state/NMF/pseudobulk context; expression-level candidate only",
+                "mechanistic_status": "candidate_hypothesis_not_activity_proof",
+            })
     tf_table = pd.DataFrame(tf_rows).sort_values("treatment_effect_OT_minus_OC") if tf_rows else pd.DataFrame([{"status": "NO_CANDIDATE_TF_EXPRESSION_FOUND"}])
     tf_table.head(2).to_csv(tf_path, sep="\t", index=False)
     # Small, hypothesis-led ligand/receptor screen; not a full communication scan.
@@ -407,6 +432,11 @@ def run_nmf_reclassification(stage_root: Path, output_root: Path) -> pd.DataFram
             lo = loo.loc[(loo["population"] == population) & (loo["k"] == k)] if not loo.empty else pd.DataFrame()
             rows.append({"population": population, "k": k, "n_models": len(sub), "max_iter_warning_models": int((sub["n_iter"] >= 300).sum()), "mean_seed_cosine": float(st["mean_component_cosine"].mean()) if not st.empty else np.nan, "median_loo_rmse": float(lo["held_out_rmse"].median()) if not lo.empty else np.nan, "interpretation": "exploratory_only; cosine stability is not biological validation; no component receives a causal label"})
         table = pd.DataFrame(rows)
+    warning_log = stage_root / "program_stability" / "continuation.log"
+    log_warning = warning_log.exists() and "Maximum number of iterations" in warning_log.read_text(encoding="utf-8", errors="ignore")
+    if not table.empty:
+        table["convergence_warning_in_existing_log"] = bool(log_warning)
+        table["baseline_comparison"] = "not recomputed; interpret LOO RMSE descriptively"
     table.to_csv(output_root / "NMF_RECLASSIFICATION.tsv", sep="\t", index=False)
     return table
 
@@ -488,6 +518,24 @@ def run_followup_validation(config: Mapping[str, Any]) -> Path:
     except Exception as exc:
         logger.error("Figures failed: %s", exc); logger.error(traceback.format_exc()); errors.append({"step": "figures", "error": repr(exc)})
 
+    granulosa_table_text = granulosa_summary.to_markdown(index=False) if not granulosa_summary.empty else "没有可用的 Granulosa 稳健性结果。"
+    stromal_table_text = stromal_direction.to_markdown(index=False) if not stromal_direction.empty else "没有可用的 Stromal 敏感性结果。"
+    nmf_table_text = nmf.to_markdown(index=False) if not nmf.empty else "没有可用的 NMF 汇总。"
+    metadata_missing = [row["field"] for row in metadata_rows if (not row["present"]) or row["n_missing"] > 0]
+    if not state_loo.empty:
+        state_mean = state_loo.loc[
+            (state_loo["summary_type"] == "full")
+            & (state_loo["metric"] == "mean")
+            & (state_loo["contrast"] == "OT_vs_OC")
+        ]
+    else:
+        state_mean = pd.DataFrame()
+    state_distance_text = (
+        state_mean[["population", "module", "effect", "OT_distance_change", "exact_permutation_p_two_sided"]]
+        .to_markdown(index=False)
+        if not state_mean.empty
+        else "没有可用的状态模块均值结果。"
+    )
     report_lines = [
         "# Stage 15 后续验证性分析报告",
         "",
@@ -502,17 +550,30 @@ def run_followup_validation(config: Mapping[str, Any]) -> Path:
         f"Granulosa稳健性门控：{'通过，进入了小范围候选分析' if gate else '未通过，候选机制分析应视为跳过或仅作记录'}。详细结果见 `GRANULOSA_ROBUSTNESS.tsv` 与 `GRANULOSA_ROBUSTNESS_SUMMARY.tsv`。",
         "年龄轴方向和到Y距离必须分别解释；任何单一library影响、外部参照差异或距离不下降都不能被称作整体年轻化。",
         "",
+        "Granulosa稳健性摘要：",
+        granulosa_table_text,
+        "稳定支持定义为完整分析中年龄轴变化<0、到Y距离变化<0，且留一library后两个方向均达到预设一致性门控；部分支持表示至少年龄轴方向稳定但距离门控未完全通过。",
+        "",
         "## Stromal证据等级",
         "",
         "Stromal敏感性分析分别比较 n_cells≥100 与 n_cells≥200，并保留冻结程序投影与重新定义外部程序的 secondary analysis。若年龄方向保持而距离变化不一致，应定级为‘年龄方向反向但年轻参考距离不一致的异质性重塑’。",
+        "",
+        "Stromal方向敏感性摘要：",
+        stromal_table_text,
+        "本轮观察到 Stromal 各主要参照的年龄轴方向均为负，但 peri-regular/peri-irregular 的到Y距离变化为正；post-acyclic 在冻结程序下距离下降，但 n≥200 时缺少合格的 aged 外部样本，不能把该结果概括为稳定改善。",
         "",
         "## 状态模块精确置换",
         "",
         "每个模块在6个OC/OT library上枚举20种三对三标签分配；经验双侧p值采用 (1 + 极端置换数)/(20+1)，可达到的最小p值为1/21。模块之间的基因重叠和library分数相关性均已输出，不能将11个模块当成11个独立证据。",
         "",
+        "Granulosa/Stromal 的 mean 模块分数与 OT−OC 距离变化如下；这些是描述性 library-level 结果，不能替代独立重复数增加：",
+        state_distance_text,
+        "",
         "## NMF重新定级",
         "",
         "NMF结果存在Maximum number of iterations警告；跨种子cosine接近1不能单独证明生物学稳定性；LOO RMSE需要与简单基线比较。当前NMF component只能作为探索性表示，不能直接命名为MRJP1机制。",
+        "",
+        nmf_table_text,
         "",
         "## 是否继续TF/微环境分析",
         "",
@@ -521,6 +582,14 @@ def run_followup_validation(config: Mapping[str, Any]) -> Path:
         "## 不能支持的结论",
         "",
         "不能支持整体年轻化、功能恢复、抗衰老机制证明、直接TF结合、直接配体–受体因果关系或把细胞数当作生物学重复。batch、estrous_stage、pool_mouse_ids缺失时，也不能区分周期、批次、pool内动物和选择性存活。",
+        "",
+        "## 可用于论文 Results/Discussion 的保守表述",
+        "",
+        "在 library-level、n=3/group 的分析中，MRJP1处理与细胞类型和状态模块特异的转录重塑相关。Granulosa 在多个外部年龄参照中呈现相反于年龄轴的变化，并在多数留一library分析中显示到年轻参考的距离下降；Stromal_fibroblast 的年龄轴方向虽相对一致，但到年轻参考的距离变化依赖参照类别和样本筛选，因此更适合表述为异质性重塑，而非整体年轻化或功能恢复。",
+        "",
+        "## 元数据与剩余限制",
+        "",
+        f"当前输入设计表中存在但仍为 unknown/TODO 或缺失的字段：{', '.join(metadata_missing) if metadata_missing else '无'}。本轮未填补任何值。",
         "",
         "## 输出清单",
         "",
