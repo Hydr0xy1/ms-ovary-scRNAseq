@@ -574,7 +574,7 @@ def run_followup_validation(config: Mapping[str, Any]) -> Path:
         "Stromal方向敏感性摘要：",
         stromal_table_text,
         "本轮观察到 Stromal 各主要参照的年龄轴方向均为负，但 peri-regular/peri-irregular 的到Y距离变化为正；post-acyclic 在冻结程序下距离下降，但 n≥200 时缺少合格的 aged 外部样本，不能把该结果概括为稳定改善。",
-        "GSM8274690（Stromal_fibroblast，n_cells=18）在 n≥100 和 n≥200 两个阈值下均被排除；排除样本及其细胞数同时记录在 `STROMAL_EXTERNAL_SENSITIVITY.tsv`。",
+        "按当前 GSE267729 外部 metadata，GSM8274690 在 Stromal_fibroblast 中并不存在低细胞记录（其 Granulosa 记录为 n_cells=1964）；实际被 Stromal 阈值 n≥100/n≥200 排除的低细胞样本为 GSM8274691（72）和 GSM8274692（88），均已写入 `STROMAL_EXTERNAL_SENSITIVITY.tsv`。",
         "",
         "## 状态模块精确置换",
         "",
