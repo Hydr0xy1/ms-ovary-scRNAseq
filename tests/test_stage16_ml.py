@@ -1,12 +1,42 @@
 from __future__ import annotations
 
+from matplotlib import pyplot as plt
 import pandas as pd
 
+from ms_ovary_scrna.stage16_figures import _display_label, _library_points
 from ms_ovary_scrna.stage16_ml import (
     _cosine,
     _extract_one_to_one_orthologs,
     _safe_float,
 )
+
+
+def test_stage16_library_points_respects_requested_groups() -> None:
+    frame = pd.DataFrame(
+        {
+            "group": ["OC", "OC", "OC", "OT", "OT", "OT"],
+            "score": [1.0, 1.1, 1.2, 0.7, 0.8, 0.9],
+        }
+    )
+    fig = _library_points(
+        frame,
+        "score",
+        "contrastiveVI score",
+        "Score",
+        group_order=["OC", "OT"],
+    )
+    try:
+        assert [tick.get_text() for tick in fig.axes[0].get_xticklabels()] == [
+            "OC\n(n=3)",
+            "OT\n(n=3)",
+        ]
+    finally:
+        plt.close(fig)
+
+
+def test_stage16_display_label_replaces_machine_separators() -> None:
+    assert _display_label("antral_like") == "antral like"
+    assert _display_label("OT_vs_OC") == "OT vs OC"
 
 
 def test_stage16_safe_float_and_cosine() -> None:

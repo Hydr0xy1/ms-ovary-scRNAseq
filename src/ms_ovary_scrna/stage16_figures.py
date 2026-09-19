@@ -58,6 +58,11 @@ def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("_")
 
 
+def _display_label(value: object) -> str:
+    """Convert machine-readable labels into concise figure text."""
+    return str(value).replace("_", " ")
+
+
 def _save(fig: mpl.figure.Figure, out_base: Path) -> None:
     out_base.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_base.with_suffix(".svg"), bbox_inches="tight")
@@ -83,18 +88,22 @@ def _library_points(
     value: str,
     title: str,
     ylabel: str,
+    group_order: Iterable[str] = GROUP_ORDER,
 ) -> mpl.figure.Figure:
+    order = list(group_order)
     fig, ax = plt.subplots(figsize=(3.50, 2.75))
     rng = np.random.default_rng(20260920)
-    for x, group in enumerate(GROUP_ORDER):
+    group_sizes: list[int] = []
+    for x, group in enumerate(order):
         block = frame.loc[frame["group"].astype(str).eq(group)]
         values = pd.to_numeric(block[value], errors="coerce").dropna()
+        group_sizes.append(len(values))
         jitter = rng.normal(0, 0.035, len(values))
         ax.scatter(
             np.repeat(x, len(values)) + jitter,
             values,
             s=24,
-            color=GROUP_COLORS[group],
+            color=GROUP_COLORS.get(group, "#555555"),
             edgecolor="white",
             linewidth=0.5,
             zorder=3,
@@ -102,7 +111,11 @@ def _library_points(
         if len(values):
             mean = float(values.mean())
             ax.plot([x - 0.18, x + 0.18], [mean, mean], color="#222222", lw=1.1)
-    ax.set_xticks(range(len(GROUP_ORDER)), GROUP_ORDER)
+    tick_labels = [
+        f"{_display_label(group)}\n(n={size})"
+        for group, size in zip(order, group_sizes, strict=True)
+    ]
+    ax.set_xticks(range(len(order)), tick_labels)
     ax.set_ylabel(ylabel)
     ax.set_title(title, loc="left", fontweight="bold")
     _style_axis(ax)
@@ -268,7 +281,7 @@ def generate_stage16_figures(project_root: Path) -> list[Path]:
                     ms=4,
                     lw=1.2,
                     color=colors.get(str(comparison), "#555555"),
-                    label=str(comparison),
+                    label=_display_label(comparison),
                 )
             ax.set_xlabel("Sinkhorn regularization multiplier")
             ax.set_ylabel("Median library-pair root cost")
@@ -331,8 +344,9 @@ def generate_stage16_figures(project_root: Path) -> list[Path]:
             fig = _library_points(
                 summary,
                 "salient_norm",
-                f"{context}: contrastiveVI salient score",
+                f"{_display_label(context)}: contrastiveVI salient score",
                 "Median salient latent norm",
+                group_order=["OC", "OT"],
             )
             base = supp_dir / name
             _save(fig, base)
