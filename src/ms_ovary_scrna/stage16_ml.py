@@ -31,6 +31,7 @@ from scipy.stats import spearmanr, wasserstein_distance
 
 from .project import project_paths, setup_logging
 from .stage15_projection_state import LIBRARIES, _log_cpm
+from .stage16_synthesis import run_stage16_synthesis
 
 
 GROUPS = ("Y", "OC", "OT")
@@ -566,6 +567,53 @@ def _geo_quick_metadata(accession: str, timeout: int = 30) -> dict[str, Any]:
     clean = re.sub(r"<[^>]+>", " ", data)
     clean = re.sub(r"\s+", " ", clean).strip()
     return {"accession": accession, "status": "queried", "metadata_excerpt": clean[:2000]}
+
+
+def _ensembl_json(url: str, timeout: int = 45) -> dict[str, Any]:
+    """Read a small Ensembl REST response without adding a new dependency."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "ms-ovary-scrnaseq-stage16/2026.09",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _extract_one_to_one_orthologs(
+    payload: Mapping[str, Any], mouse_symbol: str, release: str
+) -> list[dict[str, Any]]:
+    """Return auditable mouse-human one-to-one mappings from Ensembl payload."""
+    rows: list[dict[str, Any]] = []
+    for datum in payload.get("data", []) or []:
+        for homology in datum.get("homologies", []) or []:
+            target = homology.get("target", {}) or {}
+            source = homology.get("source", {}) or {}
+            homology_type = str(homology.get("type", ""))
+            if str(target.get("species", "")) != "homo_sapiens":
+                continue
+            if homology_type not in {"ortholog_one2one", "ortholog_one2one_apparent"}:
+                continue
+            rows.append(
+                {
+                    "mouse_gene": mouse_symbol,
+                    "mouse_ensembl_gene_id": source.get("id", ""),
+                    "mouse_protein_id": source.get("protein_id", ""),
+                    "human_gene": target.get("display_id", ""),
+                    "human_ensembl_gene_id": target.get("id", ""),
+                    "human_protein_id": target.get("protein_id", ""),
+                    "homology_type": homology_type,
+                    "mouse_identity_pct": source.get("perc_id", np.nan),
+                    "human_identity_pct": target.get("perc_id", np.nan),
+                    "confidence": homology.get("confidence", np.nan),
+                    "mapping_status": "ensembl_one_to_one",
+                    "ensembl_release": release,
+                }
+            )
+    return rows
 
 
 def run_external_registry(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
@@ -1857,50 +1905,156 @@ def run_contrastivevi(config: Mapping[str, Any], stage_root: Path, logger: Any, 
 
 def run_foundation_and_cross_species(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
     foundation = stage_root / "07_foundation_models"
-    rows = [{"model": "Geneformer", "status": "skipped", "reason": "no local pretrained checkpoint; public sample size insufficient for fine-tuning"}, {"model": "scGPT", "status": "skipped", "reason": "no local pretrained checkpoint; embedding-only benefit must beat linear baseline"}]
+    sample_registry = _read_tsv(
+        stage_root / "02_external_registry/EXTERNAL_SAMPLE_REGISTRY.tsv"
+    )
+    n_external_samples = int(
+        sample_registry.get("sample_id", pd.Series(dtype=str)).astype(str).nunique()
+    )
+    n_external_studies = int(
+        sample_registry.get("dataset", pd.Series(dtype=str)).astype(str).nunique()
+    )
+    rows = [
+        {
+            "model": "Geneformer",
+            "status": "skipped_by_decision_gate",
+            "n_external_samples": n_external_samples,
+            "n_external_studies": n_external_studies,
+            "pretrained_checkpoint_verified": False,
+            "external_leave_study_out_possible": n_external_studies >= 2,
+            "reason": "no verified local checkpoint and no multi-study external test; embedding-only benefit cannot be tested against the linear baseline",
+        },
+        {
+            "model": "scGPT",
+            "status": "skipped_by_decision_gate",
+            "n_external_samples": n_external_samples,
+            "n_external_studies": n_external_studies,
+            "pretrained_checkpoint_verified": False,
+            "external_leave_study_out_possible": n_external_studies >= 2,
+            "reason": "no verified local checkpoint and no multi-study external test; do not spend the run budget on an uninterpretable embedding",
+        },
+    ]
     pd.DataFrame(rows).to_csv(foundation / "FOUNDATION_MODEL_BENCHMARK.tsv", sep="\t", index=False)
-    (foundation / "FOUNDATION_MODEL_REPORT_CN.md").write_text("# Stage 21 基础模型\n\n本轮不下载大型预训练模型，不在9个library上微调；由于没有可验证的外部预训练 checkpoint 和足够独立 sample，记录为跳过。\n", encoding="utf-8")
-    _write_checkpoint(foundation / "CHECKPOINT.json", "FOUNDATION_MODELS_SKIPPED")
-    _update_run_state(stage_root, "07_foundation_models", "skipped", reason="no_external_checkpoint")
+    (foundation / "FOUNDATION_MODEL_REPORT_CN.md").write_text(
+        "# Stage 21 单细胞基础模型决策门\n\n"
+        f"当前可用公共参考只有{n_external_samples}个独立sample、{n_external_studies}个study。"
+        "因此无法做留一study外部泛化测试，也没有已验证的本地预训练checkpoint。"
+        "本轮不下载Geneformer/scGPT大模型，不在9个library上微调，也不会用无法证明优于Ridge/Elastic Net的embedding增加证据等级。\n",
+        encoding="utf-8",
+    )
+    _write_checkpoint(
+        foundation / "CHECKPOINT.json",
+        "FOUNDATION_MODELS_SKIPPED_BY_GATE",
+        n_external_samples=n_external_samples,
+        n_external_studies=n_external_studies,
+    )
+    _update_run_state(
+        stage_root,
+        "07_foundation_models",
+        "skipped",
+        reason="foundation_model_external_generalization_gate_failed",
+        n_external_samples=n_external_samples,
+        n_external_studies=n_external_studies,
+    )
 
     out = stage_root / "08_cross_species"
     candidate_genes = ["Foxl2", "Hif1a", "Smad3", "Il6", "Il6st", "Fgf2", "Fgfr2", "Col1a1", "Dcn", "Lum", "Cyp19a1", "Star", "Nr5a1"]
-    pd.DataFrame({"mouse_gene": candidate_genes, "human_gene": "not_queried", "mapping_status": "requires_versioned_ortholog_service"}).to_csv(out / "ORTHOLOG_MAPPING.tsv", sep="\t", index=False)
+    query_time = datetime.now(timezone.utc).isoformat()
+    try:
+        release_payload = _ensembl_json("https://rest.ensembl.org/info/data")
+        releases = release_payload.get("releases", []) or []
+        release = str(max(releases)) if releases else "REST_release_unreported"
+    except Exception as exc:
+        release = f"query_failed:{type(exc).__name__}"
+    mapping_rows: list[dict[str, Any]] = []
+    for gene in candidate_genes:
+        params = urllib.parse.urlencode(
+            {"target_species": "homo_sapiens", "type": "orthologues"}
+        )
+        url = (
+            "https://rest.ensembl.org/homology/symbol/mus_musculus/"
+            + urllib.parse.quote(gene)
+            + "?"
+            + params
+        )
+        try:
+            payload = _ensembl_json(url)
+            extracted = _extract_one_to_one_orthologs(payload, gene, release)
+            if extracted:
+                mapping_rows.extend(extracted)
+            else:
+                mapping_rows.append(
+                    {
+                        "mouse_gene": gene,
+                        "human_gene": "",
+                        "homology_type": "",
+                        "mapping_status": "no_one_to_one_ortholog_returned",
+                        "ensembl_release": release,
+                    }
+                )
+        except Exception as exc:
+            mapping_rows.append(
+                {
+                    "mouse_gene": gene,
+                    "human_gene": "",
+                    "homology_type": "",
+                    "mapping_status": f"query_failed:{type(exc).__name__}",
+                    "ensembl_release": release,
+                }
+            )
+    mapping = pd.DataFrame(mapping_rows)
+    mapping["query_date_utc"] = query_time
+    mapping["mapping_source"] = "Ensembl REST homology endpoint"
+    mapping.to_csv(out / "ORTHOLOG_MAPPING.tsv", sep="\t", index=False)
     pd.DataFrame(columns=["dataset", "population", "contrast", "effect", "status"]).to_csv(out / "CROSS_SPECIES_PROJECTION.tsv", sep="\t", index=False)
-    (out / "CROSS_SPECIES_REPORT_CN.md").write_text("# Stage 22 跨物种投影\n\n本轮只完成候选人类卵巢数据登记；尚未下载并确认可比的人类原始counts和版本化一对一同源基因表，因此不输出跨物种生物学结论。\n", encoding="utf-8")
-    _write_checkpoint(out / "CHECKPOINT.json", "CROSS_SPECIES_SKIPPED_NO_VERIFIED_HUMAN_COUNTS")
-    _update_run_state(stage_root, "08_cross_species", "skipped", reason="no_verified_human_counts")
+    n_mapped = int(mapping["mapping_status"].eq("ensembl_one_to_one").sum())
+    (out / "CROSS_SPECIES_REPORT_CN.md").write_text(
+        "# Stage 22 跨物种投影\n\n"
+        f"已使用Ensembl REST（release {release}）对{len(candidate_genes)}个预先限定的小鼠候选基因查询mouse–human一对一同源关系，返回{n_mapped}条一对一映射记录。"
+        "GSE202601和其他人卵巢候选数据尚未确认为具备可比的原始counts、独立sample和Granulosa/Stromal标签，因此本轮不做表达投影，也不输出人类有效性结论。\n\n"
+        "ORTHOLOG_MAPPING.tsv是版本化映射产物；CROSS_SPECIES_PROJECTION.tsv保留为空表，明确表示投影决策门未通过。\n",
+        encoding="utf-8",
+    )
+    checkpoint_status = (
+        "ORTHOLOG_MAPPING_COMPLETE_PROJECTION_SKIPPED"
+        if n_mapped
+        else "ORTHOLOG_MAPPING_FAILED_PROJECTION_SKIPPED"
+    )
+    _write_checkpoint(
+        out / "CHECKPOINT.json",
+        checkpoint_status,
+        ensembl_release=release,
+        n_candidate_genes=len(candidate_genes),
+        n_one_to_one_records=n_mapped,
+        projection_reason="no_verified_human_counts",
+    )
+    _update_run_state(
+        stage_root,
+        "08_cross_species",
+        "complete" if n_mapped else "skipped",
+        ortholog_mapping="complete" if n_mapped else "failed",
+        projection="skipped",
+        reason="no_verified_human_counts",
+        n_one_to_one_records=n_mapped,
+    )
 
 
 def run_mechanism_and_synthesis(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
-    out = stage_root / "09_mechanism_candidates"
-    root = paths["root"]
-    prior = _read_tsv(root / "results/deep_dive_stage15/followup_validation/GRANULOSA_TF_CANDIDATES.tsv")
-    candidates: list[dict[str, Any]] = []
-    for _, record in prior.iterrows():
-        if str(record.get("candidate_tf", "")).startswith("SKIPPED"):
-            continue
-        candidates.append({"candidate": record.get("candidate_tf"), "type": "TF", "population": "Granulosa", "treatment_effect": record.get("treatment_effect_OT_minus_OC"), "status": "candidate_hypothesis_only", "orthogonal_validation_needed": "TF activity/target program/protein validation"})
-    candidates.extend([
-        {"candidate": "Il6-Il6st", "type": "microenvironment", "population": "Stromal_to_Granulosa", "treatment_effect": np.nan, "status": "expression_supported_candidate_only", "orthogonal_validation_needed": "ligand/receptor protein and downstream response"},
-        {"candidate": "Fgf2-Fgfr2", "type": "microenvironment", "population": "Stromal_to_Granulosa", "treatment_effect": np.nan, "status": "expression_supported_candidate_only", "orthogonal_validation_needed": "ligand/receptor protein and downstream response"},
-    ])
-    pd.DataFrame(candidates).to_csv(out / "FINAL_MECHANISM_CANDIDATES.tsv", sep="\t", index=False)
-    evidence = _read_tsv(stage_root / "01_evidence_matrix/EVIDENCE_MATRIX_SUMMARY.tsv")
-    evidence.to_csv(out / "FINAL_CANDIDATE_PROGRAMS.tsv", sep="\t", index=False)
-    model_rows = []
-    for path in [stage_root / "05_external_age_models/MODEL_BENCHMARK.tsv", stage_root / "03_scvi_reference/SCVI_MODEL_RUNS.tsv", stage_root / "06_contrastivevi/CONTRASTIVEVI_STABILITY.tsv", stage_root / "07_foundation_models/FOUNDATION_MODEL_BENCHMARK.tsv"]:
-        frame = _read_tsv(path)
-        if not frame.empty:
-            frame["source_file"] = str(path.relative_to(root)); model_rows.append(frame)
-    pd.concat(model_rows, ignore_index=True).to_csv(out / "MODEL_COMPARISON.tsv", sep="\t", index=False) if model_rows else pd.DataFrame().to_csv(out / "MODEL_COMPARISON.tsv", sep="\t", index=False)
-    (out / "LIMITATIONS_AND_FAILURES_CN.md").write_text("# 限制与失败步骤\n\n统计单位为library，n=3/group；batch、estrous_stage、pool_mouse_ids缺失；公共数据与模型只有在sample级验证可行时才进入主线；深度模型、TF activity、NMF、通讯和attention结果均不等于因果机制。详见Stage16根目录FAILED_STEPS.tsv。\n", encoding="utf-8")
-    (out / "PAPER_CLAIMS_CN_EN.md").write_text("# 论文保守表述\n\n中文：MRJP1处理与细胞类型和状态特异的转录重塑相关，Granulosa在多个外部衰老方向上显示部分反向移动；治疗特异的正交重塑、外部泛化和机制候选仍需在library-level和独立数据中验证。\n\nEnglish: MRJP1 treatment was associated with cell-type- and state-specific transcriptional remodeling. Granulosa cells showed partial movement opposite to conserved aging-related transcriptional directions, whereas the magnitude of return toward young reference states and the contribution of treatment-specific orthogonal remodeling required evaluation across datasets and models.\n", encoding="utf-8")
-    (out / "NEXT_EXPERIMENTS_PRIORITY_CN.md").write_text("# 下一轮最小实验验证组合\n\n1. Granulosa：Hif1a/Smad3及代表性target程序的qPCR与Western blot；2. ROS/线粒体与类固醇生成指标；3. Il6/Fgf2及受体的组织定位或蛋白验证；4. 卵泡计数、闭锁和激素读数；5. 若条件允许，补充独立动物/批次以提高library-level重复数。\n", encoding="utf-8")
-    (out / "MASTER_REPORT_CN.md").write_text("# Stage 16–22 深度挖掘综合报告\n\n## 结论\n\nGranulosa仍是目前最稳定的MRJP1响应主线，但当前证据更支持部分年龄相关转录方向的反向移动与治疗特异重塑并存，而不是整体年轻化。Stromal_fibroblast的结果继续表现为参考依赖的异质性重塑。监督式深度学习没有被用来制造9个library上的伪预测；scVI/contrastiveVI只有在依赖、公共sample和稳定性门控通过时才可作为补充证据。\n\n## 证据边界\n\n所有正式统计仍以library/biological pool为单位。年龄分数不是真实生物学年龄；TF、配体–受体、NMF、latent factor和基础模型embedding只能作为候选机制或假说生成证据。\n\n## 当前阶段状态\n\n详见各子目录checkpoint、EVIDENCE_MATRIX.tsv、MODEL_COMPARISON.tsv、FINAL_MECHANISM_CANDIDATES.tsv和FAILED_STEPS.tsv。\n", encoding="utf-8")
-    (out / "EXECUTIVE_SUMMARY_CN.md").write_text("# 执行摘要\n\nGranulosa仍为稳定主线；Stromal只能作为异质性结果。当前模型分析若不能在公共sample和leave-one-library-out层面优于简单线性/冻结程序基线，则不提升正文证据等级。\n", encoding="utf-8")
-    _write_checkpoint(out / "CHECKPOINT.json", "SYNTHESIS_COMPLETE", n_candidates=len(candidates))
-    _update_run_state(stage_root, "09_mechanism_candidates", "complete", n_candidates=len(candidates))
+    result = run_stage16_synthesis(config, stage_root, logger, paths)
+    _update_run_state(
+        stage_root,
+        "09_mechanism_candidates",
+        "complete",
+        n_candidates=result["n_candidates"],
+        n_programs=result["n_programs"],
+    )
+    _update_run_state(
+        stage_root,
+        "10_synthesis",
+        "complete",
+        interpretation=result["geometry_interpretation"],
+        n_evidence_candidates=result["evidence_candidates"],
+    )
 
 
 def _manifest(stage_root: Path) -> None:
