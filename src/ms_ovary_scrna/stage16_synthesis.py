@@ -454,6 +454,48 @@ def run_stage16_synthesis(
         if not subtype.empty
         else np.nan
     )
+    granulosa_subtype_geometry = geometry_table.loc[
+        geometry_table["population"].astype(str).eq("Granulosa")
+        & geometry_table["analysis_level"].astype(str).eq("subtype")
+    ]
+    n_latent_subtypes = int(
+        granulosa_subtype_geometry["state"].astype(str).nunique()
+    )
+    subtype_ratio_by_state = (
+        granulosa_subtype_geometry.groupby("state", observed=True)[
+            "distance_ratio_OT_over_OC"
+        ].median()
+        if not granulosa_subtype_geometry.empty
+        else pd.Series(dtype=float)
+    )
+    granulosa_subtype_loo = geometry_loo.loc[
+        geometry_loo["population"].astype(str).eq("Granulosa")
+        & geometry_loo["analysis_level"].astype(str).eq("subtype")
+    ]
+    subtype_loo_distance_support = (
+        float(
+            pd.to_numeric(
+                granulosa_subtype_loo["distance_change_OT_minus_OC"],
+                errors="coerce",
+            )
+            .lt(0)
+            .mean()
+        )
+        if not granulosa_subtype_loo.empty
+        else np.nan
+    )
+    subtype_loo_cosine_support = (
+        float(
+            pd.to_numeric(
+                granulosa_subtype_loo["aging_treatment_cosine"],
+                errors="coerce",
+            )
+            .lt(0)
+            .mean()
+        )
+        if not granulosa_subtype_loo.empty
+        else np.nan
+    )
     external_stable = (
         float(
             robust["classification"].astype(str).eq("stable_support").mean()
@@ -524,7 +566,7 @@ Stage 15外部年龄轴中，稳定支持的Granulosa contrast占比为{_fmt(ext
 
 1. H1部分年龄回移：有方向性支持。跨seed距离下降比例={_fmt(geometry['seed_distance_support'])}，逐library LOO距离下降比例={_fmt(geometry['loo_distance_support'])}，LOO cosine为负比例={_fmt(geometry['loo_cosine_support'])}。
 2. H2正交治疗重塑：同时存在；正交残差不可忽略。contrastiveVI保留{n_cvi}个通过联合门控的候选基因，但不构成直接靶点证据。
-3. H3组成或单library驱动：Granulosa亚型支持broad方向的比例为{_fmt(subtype_support)}，但n=3/group使单library敏感性仍是主要限制。
+3. H3组成或单library驱动：既有gene-level亚型审计支持broad方向的比例为{_fmt(subtype_support)}；scVI latent中有{n_latent_subtypes}个Granulosa亚型通过覆盖门，其distance ratio范围为{_fmt(subtype_ratio_by_state.min())}-{_fmt(subtype_ratio_by_state.max())}，全部亚型LOO的距离下降/cosine为负比例分别为{_fmt(subtype_loo_distance_support)}/{_fmt(subtype_loo_cosine_support)}。这降低了纯亚型比例解释，但n=3/group仍是主要限制。
 4. H4外部泛化：尚未充分排除。公共训练和验证主要来自单一GSE267729，不能做leave-one-study-out。
 
 ## 模型增量信息
