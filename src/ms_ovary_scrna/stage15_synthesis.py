@@ -77,8 +77,12 @@ def run_stage15_synthesis(config: Mapping[str, Any]) -> Path:
         for (population, module, metric), sub in state.groupby(["population", "module", "metric"], observed=True):
             if metric != "mean":
                 continue
-            closer = int(pd.to_numeric(sub["closer_to_young"], errors="coerce").fillna(False).astype(bool).sum())
-            lines.append(f"- {population} / {module}：library-level均值中 {closer}/{len(sub)} 个可记录为距离Y较近；这只是状态描述，不等同于功能恢复。")
+            closer = bool(pd.Series(sub["closer_to_young"]).iloc[0])
+            direction = "是" if closer else "否"
+            lines.append(
+                f"- {population} / {module}：按library均值汇总，OT相对OC是否更接近Y={direction}；"
+                "这只是状态描述，不等同于功能恢复。"
+            )
     else:
         lines.append("- 状态效应表尚未可用。")
     if not projection_summary.empty:
@@ -160,4 +164,3 @@ def run_stage15_synthesis(config: Mapping[str, Any]) -> Path:
     print("STAGE15_SYNTHESIS_COMPLETE")
     print(f"OUTPUT={output_root.relative_to(root)}")
     return output_root
-
