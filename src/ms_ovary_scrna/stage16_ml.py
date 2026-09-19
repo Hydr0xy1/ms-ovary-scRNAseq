@@ -17,6 +17,7 @@ import traceback
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -24,7 +25,9 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.stats import wasserstein_distance
+from scipy.spatial import procrustes
+from scipy.spatial.distance import pdist
+from scipy.stats import spearmanr, wasserstein_distance
 
 from .project import project_paths, setup_logging
 from .stage15_projection_state import LIBRARIES, _log_cpm
@@ -237,6 +240,142 @@ def run_evidence_matrix(config: Mapping[str, Any], stage_root: Path, logger: Any
                     }
                 )
 
+    publication_source = root / "results/publication_stage13/source_data"
+    # Pathway-level evidence is kept distinct from gene-level evidence, while
+    # reusing a population:pathway ID so internal, subtype and external support
+    # can be audited together without treating them as biological replicates.
+    for population, filename in [
+        ("Granulosa", "pathway_reversal_granulosa.tsv"),
+        ("Stromal_fibroblast", "pathway_reversal_stromal_fibroblast.tsv"),
+    ]:
+        pathways = _read_tsv(publication_source / filename)
+        for _, record in pathways.iterrows():
+            rows.append(
+                {
+                    "candidate_id": f"pathway:{population}:{record.get('pathway', '')}",
+                    "candidate_type": "pathway",
+                    "population": population,
+                    "source": "stage13_pathway_GSEA_and_permutation",
+                    "aging_effect": _safe_float(record.get("aging_NES")),
+                    "treatment_effect": _safe_float(record.get("treatment_NES")),
+                    "residual_effect": _safe_float(record.get("residual_NES")),
+                    "treatment_padj": _safe_float(record.get("treatment_FDR")),
+                    "directional_rescue": bool(record.get("direction_opposite", False)),
+                    "raw_label": record.get("pathway_evidence_level", ""),
+                }
+            )
+
+    external_pathways = _read_tsv(publication_source / "external_pathway_validation.tsv")
+    for _, record in external_pathways.iterrows():
+        population = str(record.get("population", ""))
+        rows.append(
+            {
+                "candidate_id": f"pathway:{population}:{record.get('pathway', '')}",
+                "candidate_type": "pathway",
+                "population": population,
+                "source": "external_pathway_validation",
+                "aging_effect": _safe_float(record.get("external_aging_NES")),
+                "treatment_effect": _safe_float(record.get("treatment_NES")),
+                "residual_effect": np.nan,
+                "treatment_padj": _safe_float(record.get("external_aging_FDR_q")),
+                "directional_rescue": bool(
+                    record.get("direction_consistent_and_treatment_opposed", False)
+                ),
+                "raw_label": "external_direction_check",
+            }
+        )
+
+    for filename in [
+        "subtype_localization_granulosa.tsv",
+        "subtype_localization_stromal_fibroblast.tsv",
+    ]:
+        subtype_pathways = _read_tsv(publication_source / filename)
+        for _, record in subtype_pathways.iterrows():
+            population = str(record.get("broad_population", ""))
+            rows.append(
+                {
+                    "candidate_id": f"pathway:{population}:{record.get('pathway', '')}",
+                    "candidate_type": "pathway",
+                    "population": population,
+                    "source": "stage3_subtype_localization",
+                    "aging_effect": _safe_float(record.get("aging_NES")),
+                    "treatment_effect": _safe_float(record.get("treatment_NES")),
+                    "residual_effect": _safe_float(record.get("residual_NES")),
+                    "treatment_padj": _safe_float(record.get("treatment_FDR")),
+                    "directional_rescue": bool(record.get("direction_opposite", False)),
+                    "raw_label": str(record.get("subtype", "")),
+                }
+            )
+
+    exact = _read_tsv(publication_source / "population_exact_permutation_evidence.tsv")
+    for _, record in exact.iterrows():
+        population = str(record.get("population", ""))
+        rows.append(
+            {
+                "candidate_id": f"population_signature:{population}",
+                "candidate_type": "population_signature",
+                "population": population,
+                "source": "exact_3v3_permutation",
+                "aging_effect": np.nan,
+                "treatment_effect": _safe_float(record.get("whole_all_cosine_similarity_observed")),
+                "residual_effect": _safe_float(record.get("median_recovery_fraction_observed")),
+                "treatment_padj": _safe_float(record.get("whole_all_cosine_similarity_p_empirical")),
+                "directional_rescue": bool(record.get("permutation_supported_signature", False)),
+                "raw_label": record.get("population_evidence_level", ""),
+            }
+        )
+
+    communication = _read_tsv(publication_source / "communication_ligand_hypotheses.tsv")
+    for _, record in communication.iterrows():
+        sender = str(record.get("sender", ""))
+        receiver = str(record.get("receiver", ""))
+        ligand = str(record.get("ligand", ""))
+        rows.append(
+            {
+                "candidate_id": f"communication:{sender}:{receiver}:{ligand}",
+                "candidate_type": "ligand_receptor_hypothesis",
+                "population": receiver,
+                "source": "stage13_communication_candidate",
+                "aging_effect": _safe_float(record.get("sender_aging_effect")),
+                "treatment_effect": _safe_float(record.get("sender_treatment_effect")),
+                "residual_effect": _safe_float(record.get("sender_residual_effect")),
+                "treatment_padj": np.nan,
+                "directional_rescue": bool(
+                    record.get("sender_directional_rescue_candidate", False)
+                ),
+                "raw_label": "expression_supported_not_causal",
+            }
+        )
+
+    for population, filename in [
+        ("Granulosa", "nmf_programs_granulosa.tsv"),
+        ("Stromal_fibroblast", "nmf_programs_stromal_fibroblast.tsv"),
+    ]:
+        nmf = _read_tsv(publication_source / filename)
+        if nmf.empty:
+            continue
+        for program, block in nmf.groupby("program", observed=True):
+            means = block.groupby("group", observed=True)["program_activity"].mean()
+            y_mean = _safe_float(means.get("Y"))
+            oc_mean = _safe_float(means.get("OC"))
+            ot_mean = _safe_float(means.get("OT"))
+            rows.append(
+                {
+                    "candidate_id": f"nmf:{population}:{program}",
+                    "candidate_type": "NMF_program",
+                    "population": population,
+                    "source": "stage8_NMF_program",
+                    "aging_effect": oc_mean - y_mean,
+                    "treatment_effect": ot_mean - oc_mean,
+                    "residual_effect": ot_mean - y_mean,
+                    "treatment_padj": np.nan,
+                    "directional_rescue": bool(
+                        block["directionally_reversed"].astype(bool).all()
+                    ),
+                    "raw_label": "exploratory_program_not_causal",
+                }
+            )
+
     follow = root / "results/deep_dive_stage15/followup_validation"
     state = _read_tsv(follow / "STATE_MODULE_LOO.tsv")
     if not state.empty:
@@ -438,6 +577,72 @@ def run_external_registry(config: Mapping[str, Any], stage_root: Path, logger: A
         result = _geo_quick_metadata(accession)
         result.update({"source": "NCBI GEO", "query_date_utc": datetime.now(timezone.utc).isoformat(), "priority": "high" if accession == "GSE267729" else "candidate"})
         registry_rows.append(result)
+    census_version = "2025-11-08"
+    census_candidates = pd.DataFrame()
+    census_tissue_counts = pd.DataFrame()
+    try:
+        import cellxgene_census
+
+        with cellxgene_census.open_soma(census_version=census_version) as census:
+            datasets = census["census_info"]["datasets"].read().concat().to_pandas()
+            text_columns = [
+                column
+                for column in datasets.columns
+                if any(
+                    token in str(column).lower()
+                    for token in ["title", "collection", "organism", "dataset"]
+                )
+            ]
+            mask = pd.Series(False, index=datasets.index)
+            for column in text_columns:
+                mask |= datasets[column].astype(str).str.contains(
+                    r"ovar|oocyte|follic", case=False, regex=True, na=False
+                )
+            census_candidates = datasets.loc[mask].copy()
+            summary_counts = (
+                census["census_info"]["summary_cell_counts"]
+                .read()
+                .concat()
+                .to_pandas()
+            )
+            label_column = next(
+                (c for c in ["label", "value"] if c in summary_counts.columns), None
+            )
+            if label_column is not None:
+                census_tissue_counts = summary_counts.loc[
+                    summary_counts[label_column]
+                    .astype(str)
+                    .str.contains(r"ovar", case=False, regex=True, na=False)
+                ].copy()
+        census_candidates.to_csv(
+            out / "CELLXGENE_OVARY_DATASETS.tsv", sep="\t", index=False
+        )
+        census_tissue_counts.to_csv(
+            out / "CELLXGENE_OVARY_SUMMARY_COUNTS.tsv", sep="\t", index=False
+        )
+        for _, record in census_candidates.iterrows():
+            dataset_id = str(record.get("dataset_id", record.get("soma_joinid", "")))
+            title = str(
+                record.get("dataset_title", record.get("collection_name", ""))
+            )
+            registry_rows.append(
+                {
+                    "accession": dataset_id,
+                    "status": "census_metadata_candidate",
+                    "metadata_excerpt": title,
+                    "source": "CZ CELLxGENE Census",
+                    "query_date_utc": datetime.now(timezone.utc).isoformat(),
+                    "priority": "candidate",
+                    "census_version": census_version,
+                }
+            )
+        census_status = f"queried_{census_version}"
+    except Exception as exc:
+        census_status = f"query_failed:{type(exc).__name__}"
+        _record_failure(stage_root, "02_external_registry_cellxgene", exc, logger)
+        pd.DataFrame().to_csv(
+            out / "CELLXGENE_OVARY_DATASETS.tsv", sep="\t", index=False
+        )
     existing = _read_tsv(root / "results/deep_dive_stage15/external_gse267729/GSE267729_sample_registry.tsv")
     if not existing.empty:
         existing = existing.copy()
@@ -448,12 +653,16 @@ def run_external_registry(config: Mapping[str, Any], stage_root: Path, logger: A
     else:
         pd.DataFrame().to_csv(out / "EXTERNAL_SAMPLE_REGISTRY.tsv", sep="\t", index=False)
     registry = pd.DataFrame(registry_rows)
-    registry["census_status"] = "not_queried_in_registry_stage"
-    registry["include_decision"] = np.where(registry["accession"].eq("GSE267729"), "included_existing_per_sample_10X_and_metadata", "metadata_only_until_sample/library_and_age_criteria_verified")
+    registry["census_status"] = census_status
+    registry["include_decision"] = np.where(
+        registry["accession"].eq("GSE267729"),
+        "included_existing_per_sample_10X_and_metadata",
+        "metadata_only_until_sample/library_and_age_criteria_verified",
+    )
     registry.to_csv(out / "EXTERNAL_DATASET_REGISTRY.tsv", sep="\t", index=False)
     (out / "EXTERNAL_INCLUSION_REPORT_CN.md").write_text(
         "# Stage 16B 公共卵巢参考数据注册\n\n"
-        "GSE267729 已有逐样本 10X 矩阵和年龄/周期 metadata，可作为当前公共参考候选。GSE232309 和 GSE202601 本轮先完成 GEO 元数据登记，只有在确认 sample/library 身份、年龄信息、细胞类型和原始 counts 后才进入模型。\n\n"
+        f"GSE267729 已有逐样本 10X 矩阵和年龄/周期 metadata，可作为当前公共参考候选。GSE232309 和 GSE202601 本轮先完成 GEO 元数据登记，只有在确认 sample/library 身份、年龄信息、细胞类型和原始 counts 后才进入模型。CELLxGENE Census固定查询版本为{census_version}，共登记{len(census_candidates)}个标题/集合元数据候选。\n\n"
         "本轮不把公共细胞数当作生物学重复；公共训练/验证均要求按 sample/library 划分。\n",
         encoding="utf-8",
     )
@@ -571,6 +780,40 @@ def _select_hvg_genes(adata: ad.AnnData, n_genes: int = 2000) -> list[str]:
     return adata.var_names[:n_genes].astype(str).tolist()
 
 
+def _scvi_history_summary(model: Any, output: Path) -> dict[str, Any]:
+    """Save tidy training history and return final optimization diagnostics."""
+    records: list[dict[str, Any]] = []
+    history = getattr(model, "history", {}) or {}
+    for metric, values in history.items():
+        frame = values if isinstance(values, pd.DataFrame) else pd.DataFrame(values)
+        if frame.empty:
+            continue
+        numeric = pd.to_numeric(frame.iloc[:, 0], errors="coerce")
+        for epoch, value in enumerate(numeric.to_numpy()):
+            records.append({"epoch": epoch, "metric": str(metric), "value": value})
+    pd.DataFrame(records).to_csv(output, sep="\t", index=False)
+
+    summary: dict[str, Any] = {"epochs_trained": 0}
+    if records:
+        tidy = pd.DataFrame(records)
+        summary["epochs_trained"] = int(tidy["epoch"].max() + 1)
+        for label, candidates in {
+            "train_elbo_final": ("elbo_train", "train_loss_epoch"),
+            "validation_elbo_final": ("elbo_validation", "validation_loss"),
+            "reconstruction_loss_final": (
+                "reconstruction_loss_train",
+                "reconstruction_loss_validation",
+            ),
+        }.items():
+            summary[label] = np.nan
+            for metric in candidates:
+                values = tidy.loc[tidy["metric"].eq(metric), "value"].dropna()
+                if not values.empty:
+                    summary[label] = float(values.iloc[-1])
+                    break
+    return summary
+
+
 def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
     out = stage_root / "03_scvi_reference"
     root = paths["root"]
@@ -603,6 +846,8 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
     query_all.file.close()
     seeds = [20260919, 20260920, 20260921]
     use_gpu = bool(torch.cuda.is_available())
+    if use_gpu:
+        torch.set_float32_matmul_precision("high")
     latent_rows: list[pd.DataFrame] = []
     model_rows: list[dict[str, Any]] = []
     for population in FOCUS:
@@ -618,8 +863,19 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
                 scvi.settings.seed = seed
                 model = scvi.model.SCVI(combined, n_latent=10, n_layers=2, gene_likelihood="nb")
                 model_dir = out / f"model_{population}_{seed}"
-                model.train(max_epochs=60, batch_size=256, accelerator="gpu" if use_gpu else "cpu", devices=1, early_stopping=True, early_stopping_patience=10)
+                model.train(
+                    max_epochs=60,
+                    batch_size=256,
+                    accelerator="gpu" if use_gpu else "cpu",
+                    devices=1,
+                    early_stopping=True,
+                    early_stopping_patience=10,
+                    enable_progress_bar=False,
+                )
                 model.save(model_dir, overwrite=True)
+                history = _scvi_history_summary(
+                    model, out / f"SCVI_TRAINING_HISTORY_{population}_{seed}.tsv"
+                )
                 latent = model.get_latent_representation()
                 latent_df = pd.DataFrame(latent, index=combined.obs_names, columns=[f"z{i+1}" for i in range(latent.shape[1])])
                 latent_df.insert(0, "population", population)
@@ -627,26 +883,105 @@ def run_scvi_reference(config: Mapping[str, Any], stage_root: Path, logger: Any,
                 latent_df.insert(2, "dataset", combined.obs["dataset"].astype(str).to_numpy())
                 latent_df.insert(3, "group", combined.obs["group"].astype(str).to_numpy())
                 latent_df.insert(4, "seed", seed)
+                subtype_key = str(config["deep_dive_stage15"].get("subtype_key", ""))
+                subtype = (
+                    combined.obs[subtype_key].astype(str).to_numpy()
+                    if subtype_key in combined.obs
+                    else np.repeat("not_available", combined.n_obs)
+                )
+                latent_df.insert(5, "subtype", subtype)
                 latent_df.to_csv(out / f"SCVI_LATENT_CELLS_{population}_{seed}.tsv.gz", sep="\t", index=True, compression="gzip")
                 internal_latent = latent_df.loc[latent_df["dataset"] == "internal_MRJP1"].copy()
                 library_summary = internal_latent.groupby("sample_id", observed=True).mean(numeric_only=True).reset_index()
                 library_summary.insert(0, "population", population)
+                library_summary.insert(
+                    2,
+                    "group",
+                    library_summary["sample_id"].astype(str).str.split("_", n=1).str[0],
+                )
                 library_summary["seed"] = seed
                 latent_rows.append(library_summary)
-                model_rows.append({"population": population, "seed": seed, "n_public_cells": int(public.n_obs), "n_query_cells": int(query.n_obs), "n_genes": int(combined.n_vars), "n_latent": 10, "accelerator": "gpu" if use_gpu else "cpu", "model_dir": str(model_dir.relative_to(root))})
+                public_latent = latent_df.loc[latent_df["dataset"] == "GSE267729"]
+                public_centroids = public_latent.groupby("group", observed=True)[
+                    [f"z{i+1}" for i in range(latent.shape[1])]
+                ].mean()
+                public_young_old = np.nan
+                if {"young", "old"}.issubset(public_centroids.index):
+                    public_young_old = float(
+                        np.linalg.norm(
+                            public_centroids.loc["old"].to_numpy()
+                            - public_centroids.loc["young"].to_numpy()
+                        )
+                    )
+                model_rows.append(
+                    {
+                        "population": population,
+                        "seed": seed,
+                        "n_public_cells": int(public.n_obs),
+                        "n_query_cells": int(query.n_obs),
+                        "n_genes": int(combined.n_vars),
+                        "n_latent": 10,
+                        "accelerator": "gpu" if use_gpu else "cpu",
+                        "model_dir": str(model_dir.relative_to(root)),
+                        "public_young_old_centroid_distance": public_young_old,
+                        "study_mixing_assessment": "not_assessable_single_public_study",
+                        "cell_identity_assessment": "population_specific_marker_inferred_reference",
+                        **history,
+                    }
+                )
                 del model
             del combined, public, query
         except Exception as exc:
             _record_failure(stage_root, f"03_scvi_reference_{population}", exc, logger)
             continue
     pd.DataFrame(model_rows).to_csv(out / "SCVI_MODEL_RUNS.tsv", sep="\t", index=False)
+    stability_rows: list[dict[str, Any]] = []
     if latent_rows:
-        pd.concat(latent_rows, ignore_index=True).to_csv(out / "SCVI_LATENT_LIBRARY_SUMMARY.tsv", sep="\t", index=False)
-    stability = pd.DataFrame(model_rows)
-    stability.to_csv(out / "SCVI_STABILITY.tsv", sep="\t", index=False)
+        library_latent = pd.concat(latent_rows, ignore_index=True)
+        zcols = [c for c in library_latent.columns if c.startswith("z")]
+        library_latent["distance_to_internal_centroid"] = np.nan
+        library_latent["library_outlier_robust_z"] = np.nan
+        for (_, _), index in library_latent.groupby(
+            ["population", "seed"], observed=True
+        ).groups.items():
+            coords = library_latent.loc[index, zcols].to_numpy()
+            distance = np.linalg.norm(coords - coords.mean(axis=0), axis=1)
+            median = float(np.median(distance))
+            mad = float(np.median(np.abs(distance - median)))
+            robust_z = (distance - median) / max(1.4826 * mad, 1e-12)
+            library_latent.loc[index, "distance_to_internal_centroid"] = distance
+            library_latent.loc[index, "library_outlier_robust_z"] = robust_z
+        library_latent.to_csv(
+            out / "SCVI_LATENT_LIBRARY_SUMMARY.tsv", sep="\t", index=False
+        )
+        for population, block in library_latent.groupby("population", observed=True):
+            for seed_a, seed_b in combinations(sorted(block["seed"].unique()), 2):
+                left = block.loc[block["seed"].eq(seed_a)].set_index("sample_id")
+                right = block.loc[block["seed"].eq(seed_b)].set_index("sample_id")
+                common = left.index.intersection(right.index).sort_values()
+                a = left.loc[common, zcols].to_numpy()
+                b = right.loc[common, zcols].to_numpy()
+                distance_a = pdist(a)
+                distance_b = pdist(b)
+                correlation = spearmanr(distance_a, distance_b).statistic
+                _, _, disparity = procrustes(a, b)
+                stability_rows.append(
+                    {
+                        "population": population,
+                        "seed_a": int(seed_a),
+                        "seed_b": int(seed_b),
+                        "n_libraries": len(common),
+                        "library_distance_spearman": float(correlation),
+                        "procrustes_disparity": float(disparity),
+                        "public_cohort_loo": "not_assessable_single_public_study",
+                        "interpretation": "geometry_stability_not_biological_replication",
+                    }
+                )
+    pd.DataFrame(stability_rows).to_csv(out / "SCVI_STABILITY.tsv", sep="\t", index=False)
     (out / "SCVI_MODEL_CARD.md").write_text(
         "# scVI公共参考映射 model card\n\n"
-        "GSE267729 逐样本 10X 矩阵作为公共参考；本项目内部数据只作为 query 子集，不参与公共年龄程序定义。公共细胞标签由 marker score 推断，不能当作人工真值。每个样本和内部library均衡抽样至最多200个细胞，scVI使用counts层，n_latent=10，3个seed，早停。\n\n"
+        "GSE267729 逐样本 10X 矩阵作为公共参考；本项目内部数据只作为 query 子集，不参与公共年龄程序定义。公共细胞标签由 marker score 推断，不能当作人工真值。每个样本和内部library均衡抽样至最多200个细胞，scVI使用原始counts层，n_latent=10，3个seed，早停。\n\n"
+        "模型保存训练历史、公共young-old centroid距离、内部library离群度、跨seed library距离相关和Procrustes差异。由于当前只有一个合格公共study，study mixing和leave-one-public-cohort-out不可评估；这是外部泛化的明确限制。\n\n"
         "如果模型或query mapping在任一群体失败，相关结果只记录为失败，不提升证据等级。\n",
         encoding="utf-8",
     )
@@ -668,9 +1003,15 @@ def run_latent_geometry(config: Mapping[str, Any], stage_root: Path, logger: Any
         _write_checkpoint(out / "CHECKPOINT.json", "LATENT_GEOMETRY_SKIPPED_NO_SCVI")
         _update_run_state(stage_root, "04_latent_geometry_ot", "skipped", reason="no_scvi_latents")
         return
+    try:
+        import ot
+    except Exception:
+        ot = None
     geometry_rows: list[dict[str, Any]] = []
     ot_rows: list[dict[str, Any]] = []
     loo_rows: list[dict[str, Any]] = []
+    excluded_contexts: list[dict[str, Any]] = []
+    regularization_grid = [0.01, 0.05, 0.10]
     for path in files:
         frame = pd.read_csv(path, sep="\t", compression="gzip", index_col=0)
         zcols = [c for c in frame.columns if c.startswith("z")]
@@ -678,50 +1019,249 @@ def run_latent_geometry(config: Mapping[str, Any], stage_root: Path, logger: Any
             cells = pop.loc[pop["dataset"] == "internal_MRJP1"].copy()
             if cells.empty:
                 continue
-            centroids = cells.groupby(["sample_id", "group"], observed=True)[zcols].mean()
-            if not set(GROUPS).issubset(centroids.reset_index()["group"]):
-                continue
-            cent = centroids.reset_index()
-            y = cent.loc[cent["group"] == "Y", zcols].mean().to_numpy()
-            oc = cent.loc[cent["group"] == "OC", zcols].mean().to_numpy()
-            ot = cent.loc[cent["group"] == "OT", zcols].mean().to_numpy()
-            aging = oc - y
-            treatment = ot - oc
-            residual = treatment - (np.dot(treatment, aging) / max(np.dot(aging, aging), 1e-12)) * aging
-            d_oc = float(np.linalg.norm(oc - y)); d_ot = float(np.linalg.norm(ot - y))
-            geometry_rows.append({"population": population, "seed": int(pop["seed"].iloc[0]), "distance_OC_to_Y": d_oc, "distance_OT_to_Y": d_ot, "distance_ratio_OT_over_OC": d_ot / d_oc if d_oc else np.nan, "aging_treatment_cosine": _cosine(aging, treatment), "treatment_along_aging_projection": float(np.dot(treatment, aging) / max(np.dot(aging, aging), 1e-12)), "treatment_residual_norm": float(np.linalg.norm(residual)), "treatment_residual_ratio": float(np.linalg.norm(residual) / max(np.linalg.norm(treatment), 1e-12))})
-            # Equal-size cell draws avoid larger libraries dominating distribution metrics.
-            sample_arrays = {lib: cells.loc[cells["sample_id"] == lib, zcols].to_numpy() for lib in cells["sample_id"].unique()}
-            rng = np.random.default_rng(20260919)
-            for comparison, left_group, right_group in [("OT_vs_OC", "OT", "OC"), ("OT_vs_Y", "OT", "Y"), ("OC_vs_Y", "OC", "Y")]:
-                left = np.vstack([arr for lib, arr in sample_arrays.items() if lib.startswith(left_group + "_")]) if any(lib.startswith(left_group + "_") for lib in sample_arrays) else np.empty((0, len(zcols)))
-                right = np.vstack([arr for lib, arr in sample_arrays.items() if lib.startswith(right_group + "_")]) if any(lib.startswith(right_group + "_") for lib in sample_arrays) else np.empty((0, len(zcols)))
-                n = min(len(left), len(right), 1000)
-                if n == 0:
+            seed = int(pop["seed"].iloc[0])
+            contexts: list[tuple[str, str, pd.DataFrame]] = [("broad", "all", cells)]
+            if "subtype" in cells:
+                invalid = {"", "nan", "None", "not_available", "Unresolved"}
+                for subtype, subtype_cells in cells.groupby("subtype", observed=True):
+                    if str(subtype) in invalid:
+                        continue
+                    counts = subtype_cells.groupby(
+                        ["group", "sample_id"], observed=True
+                    ).size()
+                    complete = True
+                    for group in GROUPS:
+                        group_counts = counts.loc[group] if group in counts.index else pd.Series(dtype=float)
+                        if len(group_counts) < 3 or int(group_counts.min()) < 10:
+                            complete = False
+                    if complete:
+                        contexts.append(("subtype", str(subtype), subtype_cells))
+                    else:
+                        excluded_contexts.append(
+                            {
+                                "population": population,
+                                "seed": seed,
+                                "subtype": subtype,
+                                "reason": "requires_3_libraries_per_group_and_min_10_sampled_cells",
+                            }
+                        )
+
+            for analysis_level, state, context in contexts:
+                cent = context.groupby(["sample_id", "group"], observed=True)[
+                    zcols
+                ].mean().reset_index()
+                if not set(GROUPS).issubset(cent["group"]):
                     continue
-                left = left[rng.choice(len(left), n, replace=False)]
-                right = right[rng.choice(len(right), n, replace=False)]
-                w1 = float(np.mean([wasserstein_distance(left[:, j], right[:, j]) for j in range(len(zcols))]))
-                ot_rows.append({"population": population, "seed": int(pop["seed"].iloc[0]), "comparison": comparison, "n_cells_per_side": n, "metric": "coordinatewise_Wasserstein", "value": w1, "regularization": "not_applicable_coordinatewise_fallback"})
-            for excluded in LIBRARIES:
-                keep = cells.loc[cells["sample_id"] != excluded]
-                cc = keep.groupby(["sample_id", "group"], observed=True)[zcols].mean().reset_index()
-                if not set(GROUPS).issubset(cc["group"]):
-                    continue
-                yy = cc.loc[cc["group"] == "Y", zcols].mean().to_numpy(); oo = cc.loc[cc["group"] == "OC", zcols].mean().to_numpy(); tt = cc.loc[cc["group"] == "OT", zcols].mean().to_numpy()
-                aa = oo - yy; tr = tt - oo
-                loo_rows.append({"population": population, "seed": int(pop["seed"].iloc[0]), "excluded_library": excluded, "distance_change_OT_minus_OC": float(np.linalg.norm(tt - yy) - np.linalg.norm(oo - yy)), "aging_treatment_cosine": _cosine(aa, tr)})
+                y = cent.loc[cent["group"] == "Y", zcols].mean().to_numpy()
+                oc = cent.loc[cent["group"] == "OC", zcols].mean().to_numpy()
+                treated = cent.loc[cent["group"] == "OT", zcols].mean().to_numpy()
+                aging = oc - y
+                treatment = treated - oc
+                projection = float(
+                    np.dot(treatment, aging) / max(np.dot(aging, aging), 1e-12)
+                )
+                residual = treatment - projection * aging
+                d_oc = float(np.linalg.norm(oc - y))
+                d_ot = float(np.linalg.norm(treated - y))
+                geometry_rows.append(
+                    {
+                        "population": population,
+                        "analysis_level": analysis_level,
+                        "state": state,
+                        "seed": seed,
+                        "n_cells": len(context),
+                        "n_libraries": int(cent["sample_id"].nunique()),
+                        "distance_OC_to_Y": d_oc,
+                        "distance_OT_to_Y": d_ot,
+                        "distance_change_OT_minus_OC": d_ot - d_oc,
+                        "distance_ratio_OT_over_OC": d_ot / d_oc if d_oc else np.nan,
+                        "aging_treatment_cosine": _cosine(aging, treatment),
+                        "treatment_along_aging_projection": projection,
+                        "treatment_residual_norm": float(np.linalg.norm(residual)),
+                        "treatment_residual_ratio": float(
+                            np.linalg.norm(residual)
+                            / max(np.linalg.norm(treatment), 1e-12)
+                        ),
+                    }
+                )
+
+                for excluded in sorted(context["sample_id"].astype(str).unique()):
+                    keep = context.loc[context["sample_id"].astype(str).ne(excluded)]
+                    cc = keep.groupby(["sample_id", "group"], observed=True)[
+                        zcols
+                    ].mean().reset_index()
+                    if any(cc.loc[cc["group"].eq(g), "sample_id"].nunique() < 2 for g in GROUPS):
+                        continue
+                    yy = cc.loc[cc["group"] == "Y", zcols].mean().to_numpy()
+                    oo = cc.loc[cc["group"] == "OC", zcols].mean().to_numpy()
+                    tt = cc.loc[cc["group"] == "OT", zcols].mean().to_numpy()
+                    aa = oo - yy
+                    tr = tt - oo
+                    loo_rows.append(
+                        {
+                            "population": population,
+                            "analysis_level": analysis_level,
+                            "state": state,
+                            "seed": seed,
+                            "excluded_library": excluded,
+                            "distance_change_OT_minus_OC": float(
+                                np.linalg.norm(tt - yy) - np.linalg.norm(oo - yy)
+                            ),
+                            "distance_ratio_OT_over_OC": float(
+                                np.linalg.norm(tt - yy)
+                                / max(np.linalg.norm(oo - yy), 1e-12)
+                            ),
+                            "aging_treatment_cosine": _cosine(aa, tr),
+                        }
+                    )
+
+                sample_arrays = {
+                    str(library): block[zcols].to_numpy()
+                    for library, block in context.groupby("sample_id", observed=True)
+                }
+                rng = np.random.default_rng(20260919 + seed)
+                for comparison, left_group, right_group in [
+                    ("OT_vs_OC", "OT", "OC"),
+                    ("OT_vs_Y", "OT", "Y"),
+                    ("OC_vs_Y", "OC", "Y"),
+                ]:
+                    left_libraries = sorted(
+                        lib for lib in sample_arrays if lib.startswith(left_group + "_")
+                    )
+                    right_libraries = sorted(
+                        lib for lib in sample_arrays if lib.startswith(right_group + "_")
+                    )
+                    for left_library in left_libraries:
+                        for right_library in right_libraries:
+                            left = sample_arrays[left_library]
+                            right = sample_arrays[right_library]
+                            n = min(len(left), len(right), 150)
+                            if n < 10:
+                                continue
+                            a = left[rng.choice(len(left), n, replace=False)]
+                            b = right[rng.choice(len(right), n, replace=False)]
+                            coordinate_w1 = float(
+                                np.mean(
+                                    [
+                                        wasserstein_distance(a[:, j], b[:, j])
+                                        for j in range(len(zcols))
+                                    ]
+                                )
+                            )
+                            ot_rows.append(
+                                {
+                                    "population": population,
+                                    "analysis_level": analysis_level,
+                                    "state": state,
+                                    "seed": seed,
+                                    "comparison": comparison,
+                                    "left_library": left_library,
+                                    "right_library": right_library,
+                                    "n_cells_per_library": n,
+                                    "metric": "coordinatewise_Wasserstein",
+                                    "regularization": np.nan,
+                                    "value": coordinate_w1,
+                                }
+                            )
+                            if ot is None:
+                                continue
+                            cost = ot.dist(a, b, metric="sqeuclidean")
+                            positive = cost[cost > 0]
+                            cost_scale = float(np.median(positive)) if positive.size else 1.0
+                            weights = np.repeat(1.0 / n, n)
+                            for multiplier in regularization_grid:
+                                sinkhorn_cost = ot.sinkhorn2(
+                                    weights,
+                                    weights,
+                                    cost,
+                                    reg=max(multiplier * cost_scale, 1e-6),
+                                    method="sinkhorn_log",
+                                    numItermax=3000,
+                                    stopThr=1e-7,
+                                    warn=False,
+                                )
+                                ot_rows.append(
+                                    {
+                                        "population": population,
+                                        "analysis_level": analysis_level,
+                                        "state": state,
+                                        "seed": seed,
+                                        "comparison": comparison,
+                                        "left_library": left_library,
+                                        "right_library": right_library,
+                                        "n_cells_per_library": n,
+                                        "metric": "Sinkhorn_root_cost",
+                                        "regularization": multiplier,
+                                        "value": float(np.sqrt(max(float(sinkhorn_cost), 0.0))),
+                                    }
+                                )
     pd.DataFrame(geometry_rows).to_csv(out / "LATENT_GEOMETRY.tsv", sep="\t", index=False)
     pd.DataFrame(ot_rows).to_csv(out / "OPTIMAL_TRANSPORT_RESULTS.tsv", sep="\t", index=False)
-    pd.DataFrame(ot_rows).to_csv(out / "OT_SENSITIVITY.tsv", sep="\t", index=False)
+    ot_frame = pd.DataFrame(ot_rows)
+    if not ot_frame.empty:
+        sensitivity = (
+            ot_frame.groupby(
+                [
+                    "population",
+                    "analysis_level",
+                    "state",
+                    "seed",
+                    "comparison",
+                    "metric",
+                    "regularization",
+                ],
+                observed=True,
+                dropna=False,
+            )["value"]
+            .agg(["mean", "median", "std", "count"])
+            .reset_index()
+        )
+    else:
+        sensitivity = pd.DataFrame()
+    sensitivity.to_csv(out / "OT_SENSITIVITY.tsv", sep="\t", index=False)
     pd.DataFrame(loo_rows).to_csv(out / "OT_LOO_RESULTS.tsv", sep="\t", index=False)
+    pd.DataFrame(excluded_contexts).to_csv(
+        out / "SUBTYPE_COVERAGE_EXCLUSIONS.tsv", sep="\t", index=False
+    )
+    geometry = pd.DataFrame(geometry_rows)
+    granulosa = geometry.loc[
+        geometry["population"].eq("Granulosa")
+        & geometry["analysis_level"].eq("broad")
+    ] if not geometry.empty else pd.DataFrame()
+    if not granulosa.empty:
+        ratio_text = f"{granulosa['distance_ratio_OT_over_OC'].median():.3f}"
+        cosine_text = f"{granulosa['aging_treatment_cosine'].median():.3f}"
+        residual_text = f"{granulosa['treatment_residual_ratio'].median():.3f}"
+    else:
+        ratio_text = cosine_text = residual_text = "NA"
     (out / "LATENT_GEOMETRY_REPORT_CN.md").write_text(
         "# Stage 18 潜在空间几何与分布距离\n\n"
-        "当前实现使用每个library均衡抽样后的scVI latent。centroid几何和coordinatewise Wasserstein作为描述性结果；细胞bootstrap不被解释为生物学重复，最终方向仍需library-level和leave-one-library-out支持。POT/Sinkhorn若未安装则不伪造，记录为coordinatewise Wasserstein fallback。\n",
+        "当前实现使用每个library均衡抽样后的scVI latent。所有centroid先在library内聚合，再以library等权形成组中心；细胞层距离只作为技术分布诊断。\n\n"
+        f"Granulosa broad层面跨seed的中位 distance(OT,Y)/distance(OC,Y)={ratio_text}，中位 aging-treatment cosine={cosine_text}，治疗向量正交残差占比={residual_text}。这些数值需要与leave-one-library-out和Sinkhorn正则化敏感性共同解读。\n\n"
+        + (
+            "已使用POT计算三个正则化强度的library-pair Sinkhorn距离。\n"
+            if ot is not None
+            else "POT不可用，因此只保留coordinatewise Wasserstein并明确降级。\n"
+        )
+        + "细胞bootstrap或大量library-pair不能被解释为额外生物学重复；正式推断仍以9个library及既有精确置换为边界。\n",
         encoding="utf-8",
     )
-    _write_checkpoint(out / "CHECKPOINT.json", "LATENT_GEOMETRY_COMPLETE", n_geometry=len(geometry_rows), n_ot=len(ot_rows))
-    _update_run_state(stage_root, "04_latent_geometry_ot", "complete", n_geometry=len(geometry_rows))
+    _write_checkpoint(
+        out / "CHECKPOINT.json",
+        "LATENT_GEOMETRY_COMPLETE",
+        n_geometry=len(geometry_rows),
+        n_ot=len(ot_rows),
+        sinkhorn_available=ot is not None,
+        regularization_grid=regularization_grid,
+    )
+    _update_run_state(
+        stage_root,
+        "04_latent_geometry_ot",
+        "complete",
+        n_geometry=len(geometry_rows),
+        n_ot=len(ot_rows),
+        sinkhorn_available=ot is not None,
+    )
 
 
 def run_external_age_models(config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]) -> None:
@@ -776,22 +1316,133 @@ def run_external_age_models(config: Mapping[str, Any], stage_root: Path, logger:
         if len(features) < 10:
             continue
         X = cpm[features].to_numpy()
-        for model_name, estimator in [("ridge", Ridge(alpha=10.0)), ("elastic_net", ElasticNet(alpha=0.05, l1_ratio=0.2, max_iter=5000))]:
+        for model_name, estimator in [
+            ("ridge", Ridge(alpha=10.0)),
+            (
+                "elastic_net",
+                ElasticNet(alpha=0.05, l1_ratio=0.2, max_iter=50000, tol=1e-3),
+            ),
+        ]:
             preds = np.full(len(y), np.nan)
             for i in range(len(y)):
                 train = np.arange(len(y)) != i
                 model = make_pipeline(StandardScaler(), estimator)
                 model.fit(X[train], y[train]); preds[i] = model.predict(X[i : i + 1])[0]
-                loso_rows.append({"population": population, "model": model_name, "held_out_sample": pmeta.iloc[i]["sample_id"], "observed_age_months": y[i], "predicted_age_score": preds[i], "n_training_samples": int(train.sum())})
-            rows.append({"population": population, "model": model_name, "n_external_samples": len(y), "n_features": len(features), "loso_mae_months": float(mean_absolute_error(y, preds)), "loso_r2": float(r2_score(y, preds)), "decision": "exploratory_only_single_public_study"})
+                loso_rows.append(
+                    {
+                        "validation_scope": "external_sample_LOSO",
+                        "population": population,
+                        "model": model_name,
+                        "held_out_sample": pmeta.iloc[i]["sample_id"],
+                        "observed_age_months": y[i],
+                        "predicted_age_score": preds[i],
+                        "n_training_samples": int(train.sum()),
+                    }
+                )
+            rows.append(
+                {
+                    "population": population,
+                    "model": model_name,
+                    "status": "trained",
+                    "n_external_samples": len(y),
+                    "n_external_studies": 1,
+                    "n_features": len(features),
+                    "loso_mae_months": float(mean_absolute_error(y, preds)),
+                    "loso_r2": float(r2_score(y, preds)),
+                    "decision": "exploratory_only_single_public_study",
+                }
+            )
             model = make_pipeline(StandardScaler(), estimator); model.fit(X, y)
             if not internal.empty:
                 use = features
                 ipred = model.predict(np.log2(internal[use].div(internal[use].sum(axis=1), axis=0) * 1e6 + 0.5).to_numpy())
                 for library, score in zip(internal.index, ipred):
                     score_rows.append({"population": population, "model": model_name, "library_id": library, "group": str(library).split("_", 1)[0], "external_age_score": score, "n_features": len(use)})
+        rows.extend(
+            [
+                {
+                    "population": population,
+                    "model": "frozen_external_age_program",
+                    "status": "available_from_stage15",
+                    "n_external_samples": len(y),
+                    "n_external_studies": 1,
+                    "n_features": len(features),
+                    "decision": "retain_as_simple_frozen_baseline",
+                },
+                {
+                    "population": population,
+                    "model": "XGBoost",
+                    "status": "skipped",
+                    "n_external_samples": len(y),
+                    "n_external_studies": 1,
+                    "decision": "fewer_than_30_independent_samples",
+                },
+                {
+                    "population": population,
+                    "model": "scVI_latent_shallow_predictor",
+                    "status": "skipped",
+                    "n_external_samples": len(y),
+                    "n_external_studies": 1,
+                    "decision": "single_public_study_no_leave_study_out_test",
+                },
+                {
+                    "population": population,
+                    "model": "attention_MIL",
+                    "status": "skipped",
+                    "n_external_samples": len(y),
+                    "n_external_studies": 1,
+                    "decision": "deep_model_gate_failed_sample_and_study_count",
+                },
+            ]
+        )
+    score_frame = pd.DataFrame(score_rows)
+    contrast_rows: list[dict[str, Any]] = []
+    if not score_frame.empty:
+        for (population, model_name), block in score_frame.groupby(
+            ["population", "model"], observed=True
+        ):
+            means = block.groupby("group", observed=True)["external_age_score"].mean()
+            for contrast, numerator, denominator in [
+                ("OC_vs_Y", "OC", "Y"),
+                ("OT_vs_OC", "OT", "OC"),
+                ("OT_vs_Y", "OT", "Y"),
+            ]:
+                contrast_rows.append(
+                    {
+                        "population": population,
+                        "model": model_name,
+                        "contrast": contrast,
+                        "effect": _safe_float(means.get(numerator))
+                        - _safe_float(means.get(denominator)),
+                        "n_libraries_per_group": 3,
+                    }
+                )
+            for excluded in block["library_id"].astype(str):
+                kept = block.loc[block["library_id"].astype(str).ne(excluded)]
+                kept_means = kept.groupby("group", observed=True)[
+                    "external_age_score"
+                ].mean()
+                loso_rows.append(
+                    {
+                        "validation_scope": "internal_score_leave_one_library_out",
+                        "population": population,
+                        "model": model_name,
+                        "held_out_sample": excluded,
+                        "aging_effect_OC_minus_Y": _safe_float(kept_means.get("OC"))
+                        - _safe_float(kept_means.get("Y")),
+                        "treatment_effect_OT_minus_OC": _safe_float(
+                            kept_means.get("OT")
+                        )
+                        - _safe_float(kept_means.get("OC")),
+                        "residual_effect_OT_minus_Y": _safe_float(kept_means.get("OT"))
+                        - _safe_float(kept_means.get("Y")),
+                    }
+                )
     pd.DataFrame(rows).to_csv(out / "MODEL_BENCHMARK.tsv", sep="\t", index=False)
-    pd.DataFrame(score_rows).to_csv(out / "EXTERNAL_AGE_SCORE_LIBRARY.tsv", sep="\t", index=False)
+    score_frame.to_csv(out / "EXTERNAL_AGE_SCORE_LIBRARY.tsv", sep="\t", index=False)
+    pd.DataFrame(contrast_rows).to_csv(
+        out / "EXTERNAL_AGE_SCORE_CONTRASTS.tsv", sep="\t", index=False
+    )
     pd.DataFrame(loso_rows).to_csv(out / "EXTERNAL_AGE_MODEL_LOSO.tsv", sep="\t", index=False)
     (out / "EXTERNAL_AGE_MODEL_REPORT_CN.md").write_text(
         "# Stage 19 外部年龄模型\n\n"
@@ -814,42 +1465,390 @@ def run_contrastivevi(config: Mapping[str, Any], stage_root: Path, logger: Any, 
         _update_run_state(stage_root, "06_contrastivevi", "skipped", reason="dependency_missing")
         return
     try:
-        import scanpy as sc
         ContrastiveVI = scvi.external.ContrastiveVI
-        full = ad.read_h5ad(root / config["deep_dive_stage15"]["input_object"], backed="r")
+        if torch.cuda.is_available():
+            torch.set_float32_matmul_precision("high")
+        full = ad.read_h5ad(
+            root / config["deep_dive_stage15"]["input_object"], backed="r"
+        )
         obs = full.obs
+        broad_key = str(config["deep_dive_stage15"]["broad_key"])
+        subtype_key = str(config["deep_dive_stage15"]["subtype_key"])
+        tier_key = str(config["deep_dive_stage15"].get("tier_key", ""))
         genes = _select_hvg_genes(full, n_genes=1500)
-        mask = obs[config["deep_dive_stage15"]["broad_key"]].astype(str).eq("Granulosa").to_numpy() & obs["group"].astype(str).isin(["OC", "OT"]).to_numpy()
-        rng = np.random.default_rng(20260919); selected = []
-        for lib, idx in obs.loc[mask].groupby("library_id", observed=True).groups.items():
-            idx = full.obs_names.get_indexer(np.asarray(idx, dtype=str)); idx = idx[idx >= 0]
-            selected.extend((rng.choice(idx, min(len(idx), 300), replace=False)).tolist())
-        data = full[selected, genes].to_memory(); full.file.close()
+        base_mask = (
+            obs[broad_key].astype(str).eq("Granulosa")
+            & obs["group"].astype(str).isin(["OC", "OT"])
+        )
+        if tier_key in obs:
+            base_mask &= obs[tier_key].astype(str).eq("Tier1_primary")
+
+        contexts: list[tuple[str, np.ndarray]] = [("Granulosa_all", base_mask.to_numpy())]
+        if subtype_key in obs:
+            candidate_obs = obs.loc[base_mask, [subtype_key, "library_id"]].copy()
+            coverage = candidate_obs.groupby(
+                [subtype_key, "library_id"], observed=True
+            ).size().unstack(fill_value=0)
+            eligible_libraries = [
+                library for library in LIBRARIES if library.startswith(("OC_", "OT_"))
+            ]
+            eligible = coverage.reindex(columns=eligible_libraries, fill_value=0)
+            eligible = eligible.loc[eligible.min(axis=1).ge(50)]
+            for subtype in eligible.min(axis=1).sort_values(ascending=False).head(3).index:
+                contexts.append(
+                    (
+                        str(subtype),
+                        (
+                            base_mask
+                            & obs[subtype_key].astype(str).eq(str(subtype))
+                        ).to_numpy(),
+                    )
+                )
+
+        gate = pd.DataFrame(
+            [
+                {
+                    "population": "Granulosa",
+                    "gate_passed": True,
+                    "basis": "Stage15 exact permutation, external age axes, state modules and subtype/composition review",
+                    "limitation": "n=3 libraries per group; candidate representation only",
+                }
+            ]
+        )
+        gate.to_csv(out / "CONTRASTIVEVI_GATE.tsv", sep="\t", index=False)
+
         counts_layer = str(config["deep_dive_stage15"].get("counts_layer", "counts"))
-        if counts_layer not in data.layers:
-            raise KeyError(f"raw count layer is required for contrastiveVI: {counts_layer}")
-        if counts_layer != "counts":
-            data.layers["counts"] = data.layers[counts_layer].copy()
-        model_rows = []; score_rows = []
-        for seed in [20260919, 20260920, 20260921]:
-            scvi.settings.seed = seed
-            ContrastiveVI.setup_anndata(data, layer="counts")
-            model = ContrastiveVI(data, n_background_latent=5, n_salient_latent=5)
+        rng = np.random.default_rng(20260919)
+        model_rows: list[dict[str, Any]] = []
+        score_rows: list[pd.DataFrame] = []
+        stability_rows: list[dict[str, Any]] = []
+        gene_rows: list[dict[str, Any]] = []
+
+        for context_name, context_mask in contexts:
+            selected: list[int] = []
+            for _, index_names in obs.loc[context_mask].groupby(
+                "library_id", observed=True
+            ).groups.items():
+                positions = full.obs_names.get_indexer(np.asarray(index_names, dtype=str))
+                positions = positions[positions >= 0]
+                if len(positions) > 300:
+                    positions = rng.choice(positions, 300, replace=False)
+                selected.extend(positions.tolist())
+            data = full[selected, genes].to_memory()
+            if counts_layer not in data.layers:
+                raise KeyError(
+                    f"raw count layer is required for contrastiveVI: {counts_layer}"
+                )
+            if counts_layer != "counts":
+                data.layers["counts"] = data.layers[counts_layer].copy()
             background_idx = np.where(data.obs["group"].astype(str).eq("OC"))[0]
             target_idx = np.where(data.obs["group"].astype(str).eq("OT"))[0]
-            model.train(background_indices=background_idx, target_indices=target_idx, max_epochs=60, batch_size=256, accelerator="gpu" if torch.cuda.is_available() else "cpu", devices=1, early_stopping=True, early_stopping_patience=10)
-            model.save(out / f"model_seed_{seed}", overwrite=True)
-            salient = model.get_latent_representation(representation_kind="salient")
-            frame = pd.DataFrame(salient, columns=[f"salient_{i+1}" for i in range(salient.shape[1])])
-            frame.insert(0, "library_id", data.obs["library_id"].astype(str).to_numpy()); frame.insert(1, "group", data.obs["group"].astype(str).to_numpy()); frame["seed"] = seed
-            summary = frame.groupby(["library_id", "group", "seed"], observed=True).mean(numeric_only=True).reset_index(); score_rows.append(summary)
-            model_rows.append({"seed": seed, "n_cells": data.n_obs, "n_genes": data.n_vars, "n_background": len(background_idx), "n_target": len(target_idx), "accelerator": "gpu" if torch.cuda.is_available() else "cpu"})
-        pd.DataFrame(model_rows).to_csv(out / "CONTRASTIVEVI_STABILITY.tsv", sep="\t", index=False)
-        pd.concat(score_rows, ignore_index=True).to_csv(out / "CONTRASTIVEVI_LIBRARY_SCORES.tsv", sep="\t", index=False)
-        pd.DataFrame({"gene": genes, "interpretation": "feature space only; no direct causal target inference"}).to_csv(out / "CONTRASTIVEVI_PROGRAM_GENES.tsv", sep="\t", index=False)
-        (out / "CONTRASTIVEVI_MODEL_CARD.md").write_text("# contrastiveVI model card\n\nOC为background、OT为target；仅使用Granulosa且每个library均衡抽样。salient latent只作为治疗特异表示候选，需library-level和LOO验证。\n", encoding="utf-8")
-        _write_checkpoint(out / "CHECKPOINT.json", "CONTRASTIVEVI_COMPLETE", n_models=len(model_rows))
-        _update_run_state(stage_root, "06_contrastivevi", "complete", n_models=len(model_rows))
+            if len(background_idx) < 100 or len(target_idx) < 100:
+                stability_rows.append(
+                    {
+                        "context": context_name,
+                        "run_type": "skipped",
+                        "reason": "insufficient_balanced_cells",
+                    }
+                )
+                continue
+            ContrastiveVI.setup_anndata(data, layer="counts")
+            context_scores: list[pd.DataFrame] = []
+            for seed in [20260919, 20260920, 20260921]:
+                scvi.settings.seed = seed
+                model = ContrastiveVI(
+                    data, n_background_latent=5, n_salient_latent=5
+                )
+                model.train(
+                    background_indices=background_idx.tolist(),
+                    target_indices=target_idx.tolist(),
+                    max_epochs=60,
+                    batch_size=256,
+                    accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                    devices=1,
+                    early_stopping=True,
+                    early_stopping_patience=10,
+                    enable_progress_bar=False,
+                )
+                model_dir = out / f"model_{context_name}_{seed}"
+                model.save(model_dir, overwrite=True)
+                history = _scvi_history_summary(
+                    model,
+                    out / f"CONTRASTIVEVI_TRAINING_HISTORY_{context_name}_{seed}.tsv",
+                )
+                salient = model.get_latent_representation(
+                    representation_kind="salient"
+                )
+                frame = pd.DataFrame(
+                    salient,
+                    columns=[f"salient_{i+1}" for i in range(salient.shape[1])],
+                )
+                frame.insert(
+                    0, "library_id", data.obs["library_id"].astype(str).to_numpy()
+                )
+                frame.insert(1, "group", data.obs["group"].astype(str).to_numpy())
+                frame["salient_norm"] = np.linalg.norm(salient, axis=1)
+                frame["seed"] = seed
+                frame["context"] = context_name
+                summary = (
+                    frame.groupby(
+                        ["context", "library_id", "group", "seed"], observed=True
+                    )
+                    .mean(numeric_only=True)
+                    .reset_index()
+                )
+                summary["run_type"] = "full"
+                summary["excluded_library"] = ""
+                context_scores.append(summary)
+                score_rows.append(summary)
+                group_means = summary.groupby("group", observed=True)[
+                    "salient_norm"
+                ].mean()
+                stability_rows.append(
+                    {
+                        "context": context_name,
+                        "run_type": "full_seed",
+                        "seed": seed,
+                        "excluded_library": "",
+                        "n_cells": data.n_obs,
+                        "n_genes": data.n_vars,
+                        "salient_norm_effect_OT_minus_OC": _safe_float(
+                            group_means.get("OT")
+                        )
+                        - _safe_float(group_means.get("OC")),
+                        "accelerator": "gpu" if torch.cuda.is_available() else "cpu",
+                        **history,
+                    }
+                )
+                model_rows.append(
+                    {
+                        "context": context_name,
+                        "seed": seed,
+                        "n_cells": data.n_obs,
+                        "n_genes": data.n_vars,
+                        "n_background": len(background_idx),
+                        "n_target": len(target_idx),
+                        "accelerator": "gpu" if torch.cuda.is_available() else "cpu",
+                        "model_dir": str(model_dir.relative_to(root)),
+                        **history,
+                    }
+                )
+
+                counts = data.layers["counts"]
+                dense = counts.toarray() if sparse.issparse(counts) else np.asarray(counts)
+                totals = dense.sum(axis=1, keepdims=True)
+                logged = np.log1p(dense / np.maximum(totals, 1.0) * 1e4)
+                expression_centered = logged - logged.mean(axis=0, keepdims=True)
+                latent_centered = salient - salient.mean(axis=0, keepdims=True)
+                numerator = latent_centered.T @ expression_centered
+                denominator = np.sqrt(
+                    (latent_centered**2).sum(axis=0)[:, None]
+                    * (expression_centered**2).sum(axis=0)[None, :]
+                )
+                correlations = numerator / np.maximum(denominator, 1e-12)
+                max_abs = np.max(np.abs(correlations), axis=0)
+                best_factor = np.argmax(np.abs(correlations), axis=0)
+                ranks = pd.Series(-max_abs).rank(method="min").astype(int).to_numpy()
+                for gene_index, gene in enumerate(data.var_names.astype(str)):
+                    factor = int(best_factor[gene_index])
+                    gene_rows.append(
+                        {
+                            "context": context_name,
+                            "seed": seed,
+                            "gene": gene,
+                            "best_salient_factor": factor + 1,
+                            "correlation": float(correlations[factor, gene_index]),
+                            "max_abs_correlation": float(max_abs[gene_index]),
+                            "within_seed_rank": int(ranks[gene_index]),
+                        }
+                    )
+                del model
+
+            if context_scores:
+                all_context_scores = pd.concat(context_scores, ignore_index=True)
+                for seed_a, seed_b in combinations(
+                    sorted(all_context_scores["seed"].unique()), 2
+                ):
+                    left = all_context_scores.loc[
+                        all_context_scores["seed"].eq(seed_a)
+                    ].set_index("library_id")
+                    right = all_context_scores.loc[
+                        all_context_scores["seed"].eq(seed_b)
+                    ].set_index("library_id")
+                    common = left.index.intersection(right.index)
+                    correlation = spearmanr(
+                        left.loc[common, "salient_norm"],
+                        right.loc[common, "salient_norm"],
+                    ).statistic
+                    stability_rows.append(
+                        {
+                            "context": context_name,
+                            "run_type": "seed_pair_stability",
+                            "seed": f"{seed_a}:{seed_b}",
+                            "excluded_library": "",
+                            "library_score_spearman": float(correlation),
+                        }
+                    )
+
+            # Leave-one-library-out sensitivity uses one fixed seed and reports
+            # invariant salient norm rather than comparing rotated latent axes.
+            for excluded in sorted(data.obs["library_id"].astype(str).unique()):
+                keep = np.where(data.obs["library_id"].astype(str).ne(excluded))[0]
+                loo = data[keep].copy()
+                ContrastiveVI.setup_anndata(loo, layer="counts")
+                loo_background = np.where(loo.obs["group"].astype(str).eq("OC"))[0]
+                loo_target = np.where(loo.obs["group"].astype(str).eq("OT"))[0]
+                scvi.settings.seed = 20260919
+                loo_model = ContrastiveVI(
+                    loo, n_background_latent=5, n_salient_latent=5
+                )
+                loo_model.train(
+                    background_indices=loo_background.tolist(),
+                    target_indices=loo_target.tolist(),
+                    max_epochs=40,
+                    batch_size=256,
+                    accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                    devices=1,
+                    early_stopping=True,
+                    early_stopping_patience=8,
+                    enable_progress_bar=False,
+                )
+                loo_salient = loo_model.get_latent_representation(
+                    representation_kind="salient"
+                )
+                loo_frame = pd.DataFrame(
+                    {
+                        "context": context_name,
+                        "library_id": loo.obs["library_id"].astype(str).to_numpy(),
+                        "group": loo.obs["group"].astype(str).to_numpy(),
+                        "seed": 20260919,
+                        "salient_norm": np.linalg.norm(loo_salient, axis=1),
+                        "run_type": "leave_one_library_out",
+                        "excluded_library": excluded,
+                    }
+                )
+                loo_summary = (
+                    loo_frame.groupby(
+                        [
+                            "context",
+                            "library_id",
+                            "group",
+                            "seed",
+                            "run_type",
+                            "excluded_library",
+                        ],
+                        observed=True,
+                    )["salient_norm"]
+                    .mean()
+                    .reset_index()
+                )
+                score_rows.append(loo_summary)
+                means = loo_summary.groupby("group", observed=True)[
+                    "salient_norm"
+                ].mean()
+                stability_rows.append(
+                    {
+                        "context": context_name,
+                        "run_type": "leave_one_library_out",
+                        "seed": 20260919,
+                        "excluded_library": excluded,
+                        "salient_norm_effect_OT_minus_OC": _safe_float(means.get("OT"))
+                        - _safe_float(means.get("OC")),
+                    }
+                )
+                del loo_model, loo
+            del data
+        full.file.close()
+
+        scores = pd.concat(score_rows, ignore_index=True) if score_rows else pd.DataFrame()
+        stability = pd.DataFrame(stability_rows)
+        genes_raw = pd.DataFrame(gene_rows)
+        evidence = _read_tsv(stage_root / "01_evidence_matrix/EVIDENCE_MATRIX.tsv")
+        supported_genes = set()
+        if not evidence.empty:
+            supported = evidence.loc[
+                evidence["population"].astype(str).eq("Granulosa")
+                & evidence["candidate_type"].astype(str).eq("gene")
+                & evidence["directional_rescue"].astype(bool)
+            ]
+            supported_genes = {
+                str(value).rsplit(":", 1)[-1] for value in supported["candidate_id"]
+            }
+        program_rows: list[dict[str, Any]] = []
+        if not genes_raw.empty:
+            for (context_name, gene), block in genes_raw.groupby(
+                ["context", "gene"], observed=True
+            ):
+                n_top100 = int(block["within_seed_rank"].le(100).sum())
+                loo_effects = stability.loc[
+                    stability["context"].eq(context_name)
+                    & stability["run_type"].eq("leave_one_library_out"),
+                    "salient_norm_effect_OT_minus_OC",
+                ].dropna()
+                loo_sign_fraction = float((loo_effects > 0).mean()) if len(loo_effects) else np.nan
+                independent = gene in supported_genes
+                stable_seed = n_top100 >= 2
+                retained = bool(
+                    stable_seed
+                    and independent
+                    and np.isfinite(loo_sign_fraction)
+                    and loo_sign_fraction >= 0.8
+                )
+                program_rows.append(
+                    {
+                        "context": context_name,
+                        "gene": gene,
+                        "median_max_abs_correlation": float(
+                            block["max_abs_correlation"].median()
+                        ),
+                        "n_seeds_top100": n_top100,
+                        "cross_seed_stable": stable_seed,
+                        "loo_positive_effect_fraction": loo_sign_fraction,
+                        "independent_gene_level_support": independent,
+                        "retained_candidate": retained,
+                        "interpretation": "correlation_with_salient_latent_not_causal_loading",
+                    }
+                )
+        programs = pd.DataFrame(program_rows)
+        if not programs.empty:
+            programs = programs.sort_values(
+                ["retained_candidate", "n_seeds_top100", "median_max_abs_correlation"],
+                ascending=[False, False, False],
+            )
+        scores.to_csv(out / "CONTRASTIVEVI_LIBRARY_SCORES.tsv", sep="\t", index=False)
+        stability.to_csv(out / "CONTRASTIVEVI_STABILITY.tsv", sep="\t", index=False)
+        programs.to_csv(out / "CONTRASTIVEVI_PROGRAM_GENES.tsv", sep="\t", index=False)
+        pd.DataFrame(model_rows).to_csv(
+            out / "CONTRASTIVEVI_MODEL_RUNS.tsv", sep="\t", index=False
+        )
+        n_retained = int(programs["retained_candidate"].sum()) if not programs.empty else 0
+        (out / "CONTRASTIVEVI_MODEL_CARD.md").write_text(
+            "# contrastiveVI model card\n\n"
+            "OC为background、OT为target；只使用Granulosa Tier1细胞，并在每个library内等量抽样。模型覆盖Granulosa整体及满足每个OC/OT library至少50个细胞的主要亚型，使用3个完整模型seed和逐library留一敏感性。\n\n"
+            "模型不把library作为需消除的batch，因为library与实验组完全嵌套；这也意味着技术library差异仍是明确限制。salient latent以旋转不变的norm聚合到library层面。代表基因来自表达与salient factor的相关性，只是解释性候选，不是因果调控或模型attention。\n",
+            encoding="utf-8",
+        )
+        (out / "CONTRASTIVEVI_REPORT_CN.md").write_text(
+            "# Stage 20 contrastiveVI结果\n\n"
+            f"共评估{len(contexts)}个Granulosa层级；经过跨seed、leave-one-library-out和独立gene-level证据联合门控后，保留{n_retained}个候选基因。即使通过门控，结果仍只表示与OC/OT contrastive salient表示相关，不能解释为MRJP1直接靶点。\n\n"
+            "如果salient norm主要由单个library、测序深度或亚型覆盖驱动，应放弃相应context；详见CONTRASTIVEVI_STABILITY.tsv和library scores。\n",
+            encoding="utf-8",
+        )
+        _write_checkpoint(
+            out / "CHECKPOINT.json",
+            "CONTRASTIVEVI_COMPLETE",
+            n_contexts=len(contexts),
+            n_full_models=len(contexts) * 3,
+            n_loo_models=len(contexts) * 6,
+            n_retained_genes=n_retained,
+        )
+        _update_run_state(
+            stage_root,
+            "06_contrastivevi",
+            "complete",
+            n_contexts=len(contexts),
+            n_retained_genes=n_retained,
+        )
     except Exception as exc:
         _record_failure(stage_root, "06_contrastivevi_training", exc, logger)
         _write_checkpoint(out / "CHECKPOINT.json", "CONTRASTIVEVI_FAILED", error=repr(exc))
