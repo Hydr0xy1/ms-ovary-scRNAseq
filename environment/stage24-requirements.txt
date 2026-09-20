@@ -1,0 +1,4 @@
+# Additive dependencies for the isolated Stage 24 Python environment.
+# The environment inherits the validated ovary_sc scientific stack.
+scTenifoldpy==0.4.0
+tensorly==0.9.0

@@ -318,3 +318,69 @@ deep_dive_stage15:
     seeds: [20260917, 20260918, 20260919]
     max_iter: 300
     top_genes: 50
+
+stage24_virtual_knockout:
+  # Isolated exploratory virtual-knockout pilot. Earlier objects and results
+  # are read-only. Model-internal gene p-values are not biological-replicate
+  # evidence and must not be interpreted as causal proof.
+  input_object: results/06_annotation_v2.h5ad
+  output_dir: results/deep_dive_stage24_virtual_knockout
+  figure_dir: figures/deep_dive_stage24_virtual_knockout
+  counts_layer: counts
+  broad_key: cell_type_broad_v2
+  target_population: Granulosa
+  group_key: group
+  reference_group: OC
+  library_key: library_id
+  tier_key: analysis_tier_v2
+  primary_tier: Tier1_primary
+  sensitivity_tiers: [Tier1_primary, Tier2_sensitivity]
+  primary_candidates: [Hif1a, Smad3, Igfbp2, Pak3, Abca1]
+  secondary_candidates: [Il6st, Fgfr2, H1f10]
+  state_modules_file: resources/gene_sets/deep_dive_state_modules.yaml
+  n_genes: 3000
+  hvg_flavor: seurat_v3
+  hvg_batch_key: library_id
+  min_detection_fraction: 0.05
+  forced_min_detection_fraction: 0.01
+  expression_matched_reference_count: 5
+  scenarios:
+    tier1_primary:
+      tiers: [Tier1_primary]
+      cells_per_library: 300
+      seeds: [20260920, 20260921, 20260922]
+    tier1_plus_tier2:
+      tiers: [Tier1_primary, Tier2_sensitivity]
+      cells_per_library: 1200
+      seeds: [20260920, 20260921, 20260922]
+  leave_one_library_out:
+    enabled: true
+    tiers: [Tier1_primary]
+    cells_per_library: 300
+    seed: 20260923
+  network:
+    n_nets: 10
+    n_samp_cells: 500
+    n_comp: 3
+    q: 0.90
+    backend: joblib-loky
+    n_jobs: 10
+  tensor_decomposition:
+    K: 3
+    max_iter: 1000
+    tol: 0.00001
+    n_decimal: 3
+  manifold_alignment:
+    d: 2
+  r_crosscheck:
+    enabled: true
+    target_gene: Hif1a
+    n_genes: 1000
+    scenario: tier1_primary
+    seed: 20260920
+    n_cores: 10
+    rscript: /root/autodl-tmp/envs/ovary_stage24_r/bin/Rscript
+  stability_top_fraction: 0.05
+  random_seed: 20260920
+  figure_formats: [svg, pdf, png, tiff]
+  png_dpi: 600
