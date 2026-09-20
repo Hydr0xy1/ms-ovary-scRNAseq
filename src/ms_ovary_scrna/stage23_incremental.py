@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import traceback
 from datetime import datetime, timezone
 from itertools import combinations
@@ -29,7 +30,13 @@ CENSUS_VERSION = "2025-11-08"
 MOUSE_OVARY_DATASET = "b8342509-75c7-463a-9829-f39eba78f366"
 HUMAN_OVARY_DATASET = "3a702020-cf66-4ef5-9d11-4a5e835b7efb"
 GROUP_ORDER = ("Y", "OC", "OT")
-GROUP_COLORS = {"Y": "#4C78A8", "OC": "#7A7A7A", "OT": "#D26A4A"}
+GROUP_COLORS = {
+    "Y": "#4C78A8",
+    "OC": "#7A7A7A",
+    "OT": "#D26A4A",
+    "young": "#4C78A8",
+    "older": "#B35C44",
+}
 PRIORITY_MODULES = (
     "SASP_inflammation",
     "atresia",
@@ -1128,13 +1135,19 @@ def run_human_conservation(
         ]
     )
     _write_tsv(decision, out / "HUMAN_PROJECTION_DECISION.tsv")
+    projection_rows = pd.DataFrame()
+    mapping_summary = pd.DataFrame()
+    if gate_passed:
+        projection_rows, mapping_summary = _run_human_frozen_projection(root, out)
     (out / "HUMAN_CONSERVATION_REPORT_CN.md").write_text(
         "# 人类保守性数据门控\n\n"
         f"在固定CELLxGENE Census版本{CENSUS_VERSION}中，GSE202601共有{len(obs)}个primary cells；"
         f"颗粒细胞覆盖{n_donors}个donor和{n_stages}个development_stage。"
         "本阶段先完成sample/age/cell-type可恢复性门控并复用版本化one-to-one ortholog表。\n\n"
         + (
-            "门控通过，可在下一断点执行冻结mouse program表达投影；当前文件不提前声称人类保守性。\n"
+            "门控通过，已按donor聚合raw counts，并将预先冻结的小鼠Granulosa年龄程序"
+            "经Ensembl one-to-one ortholog映射后投影到8位donor。该分析只检验年龄方向保守性，"
+            "不代表MRJP1在人类中的治疗证据。\n"
             if gate_passed
             else "门控未通过，未下载或投影人类表达矩阵，也不输出人类有效性结论。\n"
         ),
@@ -1146,8 +1159,218 @@ def run_human_conservation(
         gate_passed=gate_passed,
         n_granulosa_donors=n_donors,
         n_stages=n_stages,
+        n_projection_rows=len(projection_rows),
+        n_mapped_genes=int(
+            mapping_summary["human_gene"].fillna("").astype(str).str.len().gt(0).sum()
+        )
+        if not mapping_summary.empty
+        else 0,
     )
     _update_state(stage_root, "05_human_conservation", "complete", gate_passed=gate_passed)
+
+
+def _human_granulosa_pseudobulk(out: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    counts_path = out / "GSE202601_CENSUS_GRANULOSA_PSEUDOBULK_COUNTS.tsv.gz"
+    metadata_path = out / "GSE202601_CENSUS_GRANULOSA_PSEUDOBULK_METADATA.tsv"
+    if counts_path.exists() and metadata_path.exists():
+        return _read_tsv(counts_path, index_col=0), _read_tsv(metadata_path)
+    import cellxgene_census
+
+    filter_text = (
+        f'dataset_id == "{HUMAN_OVARY_DATASET}" and is_primary_data == True '
+        'and cell_type == "granulosa cell"'
+    )
+    with cellxgene_census.open_soma(census_version=CENSUS_VERSION) as census:
+        adata = cellxgene_census.get_anndata(
+            census,
+            organism="Homo sapiens",
+            X_name="raw",
+            obs_value_filter=filter_text,
+            obs_column_names=[
+                "dataset_id",
+                "donor_id",
+                "development_stage",
+                "cell_type",
+                "is_primary_data",
+                "sex",
+            ],
+            var_column_names=["feature_id", "feature_name"],
+        )
+    if adata.n_obs == 0:
+        raise RuntimeError("CELLxGENE returned no primary GSE202601 granulosa cells")
+    symbols = adata.var["feature_name"].astype(str).to_numpy()
+    rows = []
+    meta_rows = []
+    for donor, positions in adata.obs.groupby("donor_id", observed=True).indices.items():
+        block = adata.X[positions]
+        rows.append(np.asarray(block.sum(axis=0)).ravel())
+        obs = adata.obs.iloc[positions]
+        stage = str(obs["development_stage"].mode().iloc[0])
+        matched = re.search(r"(\d+)-year-old", stage)
+        age = int(matched.group(1)) if matched else np.nan
+        meta_rows.append(
+            {
+                "sample_id": str(donor),
+                "donor_id": str(donor),
+                "development_stage": stage,
+                "age_years": age,
+                "group": "young" if np.isfinite(age) and age < 40 else "older",
+                "n_cells": len(positions),
+                "dataset": "GSE202601",
+                "census_dataset_id": HUMAN_OVARY_DATASET,
+                "census_version": CENSUS_VERSION,
+                "is_primary_data": True,
+            }
+        )
+    counts = _collapse_gene_symbols(np.vstack(rows), symbols)
+    counts.index = [row["sample_id"] for row in meta_rows]
+    counts.to_csv(counts_path, sep="\t", compression="gzip")
+    metadata = pd.DataFrame(meta_rows)
+    _write_tsv(metadata, metadata_path)
+    return counts, metadata
+
+
+def _extend_human_ortholog_mapping(
+    root: Path, out: Path, mouse_genes: Sequence[str]
+) -> pd.DataFrame:
+    mapping_path = out / "STAGE23_ONE_TO_ONE_ORTHOLOG_MAPPING.tsv"
+    existing = _read_tsv(mapping_path)
+    if not existing.empty and set(mouse_genes).issubset(set(existing["mouse_gene"])):
+        return existing
+    base = _read_tsv(root / "results/deep_dive_stage16_ml/08_cross_species/ORTHOLOG_MAPPING.tsv")
+    records = base.to_dict("records") if not base.empty else []
+    available = set(base["mouse_gene"].astype(str)) if not base.empty else set()
+    from .stage16_ml import _query_one_to_one_orthologs
+
+    query_time = datetime.now(timezone.utc).isoformat()
+    for gene in mouse_genes:
+        if gene in available:
+            continue
+        rows, error = _query_one_to_one_orthologs(str(gene), "116", attempts=2)
+        if rows:
+            for row in rows:
+                row.update(
+                    {
+                        "query_date_utc": query_time,
+                        "mapping_source": "Ensembl REST homology endpoint",
+                    }
+                )
+                records.append(row)
+        else:
+            records.append(
+                {
+                    "mouse_gene": str(gene),
+                    "human_gene": "",
+                    "mapping_status": error or "no_one_to_one_mapping",
+                    "ensembl_release": "116",
+                    "query_date_utc": query_time,
+                    "mapping_source": "Ensembl REST homology endpoint",
+                }
+            )
+    mapping = pd.DataFrame(records)
+    mapping = mapping.drop_duplicates(["mouse_gene", "human_gene"], keep="first")
+    _write_tsv(mapping, mapping_path)
+    return mapping
+
+
+def _human_program_score(
+    counts: pd.DataFrame,
+    mouse_program: pd.DataFrame,
+    mapping: pd.DataFrame,
+    n_genes: int = 200,
+) -> tuple[pd.Series, int]:
+    ranked = mouse_program.assign(
+        abs_effect=pd.to_numeric(mouse_program["external_age_log2fc"], errors="coerce").abs()
+    ).sort_values("abs_effect", ascending=False)
+    ranked = ranked.drop_duplicates("gene").head(n_genes)
+    mapped = ranked.merge(
+        mapping[["mouse_gene", "human_gene", "mapping_status"]],
+        left_on="gene",
+        right_on="mouse_gene",
+        how="left",
+    )
+    mapped = mapped.loc[
+        mapped["human_gene"].astype(str).isin(counts.columns)
+        & mapped["mapping_status"].astype(str).eq("ensembl_one_to_one")
+    ].drop_duplicates("human_gene")
+    if len(mapped) < 20:
+        raise RuntimeError(f"Only {len(mapped)} one-to-one genes overlap human counts")
+    expression = _log_cpm(counts[mapped["human_gene"].astype(str).tolist()])
+    standardized = expression.subtract(expression.mean(axis=0), axis=1)
+    standardized = standardized.div(expression.std(axis=0, ddof=1).replace(0, np.nan), axis=1)
+    standardized = standardized.fillna(0.0)
+    weights = mapped.set_index("human_gene")["external_age_log2fc"].astype(float)
+    weights = weights / weights.abs().sum()
+    return standardized.mul(weights, axis=1).sum(axis=1), len(mapped)
+
+
+def _run_human_frozen_projection(root: Path, out: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    counts, metadata = _human_granulosa_pseudobulk(out)
+    internal = _read_tsv(root / "results/de_stage1_5/Granulosa/rescue_ready_effects.tsv.gz")
+    internal_program = (
+        internal[["gene", "aging_effect"]]
+        .drop_duplicates("gene")
+        .rename(columns={"aging_effect": "external_age_log2fc"})
+    )
+    external = _read_tsv(
+        root / "results/deep_dive_stage15/external_gse267729/GSE267729_external_age_programs.tsv.gz"
+    )
+    external_program = external.loc[
+        external["population"].eq("Granulosa") & external["contrast"].eq("post_acyclic_vs_young"),
+        ["gene", "external_age_log2fc"],
+    ].drop_duplicates("gene")
+    gene_union = []
+    for program in [internal_program, external_program]:
+        ranked = program.assign(
+            abs_effect=pd.to_numeric(program["external_age_log2fc"], errors="coerce").abs()
+        ).sort_values("abs_effect", ascending=False)
+        gene_union.extend(ranked["gene"].astype(str).head(200).tolist())
+    gene_union = list(dict.fromkeys(gene_union))
+    mapping = _extend_human_ortholog_mapping(root, out, gene_union)
+    mapping_summary = mapping.loc[mapping["mouse_gene"].astype(str).isin(gene_union)].copy()
+    _write_tsv(mapping_summary, out / "FROZEN_PROGRAM_ORTHOLOG_MAPPING.tsv")
+
+    result_rows = []
+    score_frames = []
+    for label, program in [
+        ("internal_mouse_OC_vs_Y", internal_program),
+        ("external_mouse_GSE267729_post_vs_young", external_program),
+    ]:
+        score, n_genes = _human_program_score(counts, program, mapping)
+        frame = metadata.copy()
+        frame["program"] = label
+        frame["score"] = frame["sample_id"].map(score)
+        effect, pvalue, n_allocations = _exact_permutation(
+            frame.loc[frame["group"].eq("older"), "score"],
+            frame.loc[frame["group"].eq("young"), "score"],
+        )
+        result_rows.append(
+            {
+                "program": label,
+                "effect_older_minus_young": effect,
+                "exact_permutation_p_two_sided_plus_one": pvalue,
+                "n_allocations": n_allocations,
+                "n_one_to_one_program_genes": n_genes,
+                "statistical_unit": "human_donor",
+                "interpretation": "age_direction_conservation_not_treatment_evidence",
+            }
+        )
+        score_frames.append(frame)
+        source_name = f"human_{label}_donor_scores".lower()
+        _write_tsv(frame, out.parent / "figures/source_data" / f"{source_name}.tsv")
+        fig = _library_figure(
+            frame,
+            "score",
+            f"Human granulosa: {label.replace('_', ' ')}",
+            "Frozen mouse-program score",
+            group_order=("young", "older"),
+        )
+        _save_figure(fig, out.parent / "figures" / source_name)
+    scores = pd.concat(score_frames, ignore_index=True)
+    result = pd.DataFrame(result_rows)
+    _write_tsv(scores, out / "HUMAN_FROZEN_PROGRAM_DONOR_SCORES.tsv")
+    _write_tsv(result, out / "HUMAN_FROZEN_PROGRAM_VALIDATION.tsv")
+    return result, mapping_summary
 
 
 def run_evidence_reconciliation(
