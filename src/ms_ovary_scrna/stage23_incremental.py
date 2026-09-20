@@ -874,40 +874,26 @@ def run_axis_program_attribution(
                 {"excluded_library": excluded, "metric": metric, "spearman_rho_vs_full": rho}
             )
     loo = pd.concat(loo_frames, ignore_index=True)
-    summaries = []
-    for gene, block in loo.groupby("gene", observed=True):
-        full_row = full.loc[full["gene"].eq(gene)].iloc[0]
-        summaries.append(
-            {
-                "gene": gene,
-                "aging_effect_OC_minus_Y": full_row["aging_effect_OC_minus_Y"],
-                "treatment_effect_OT_minus_OC": full_row["treatment_effect_OT_minus_OC"],
-                "parallel_treatment_component": full_row["parallel_treatment_component"],
-                "orthogonal_treatment_residual": full_row["orthogonal_treatment_residual"],
-                "global_parallel_coefficient": full_row["global_parallel_coefficient"],
-                "loo_aging_same_sign_fraction": float(
-                    np.mean(
-                        np.sign(block["aging_effect_OC_minus_Y"])
-                        == np.sign(full_row["aging_effect_OC_minus_Y"])
-                    )
-                ),
-                "loo_treatment_same_sign_fraction": float(
-                    np.mean(
-                        np.sign(block["treatment_effect_OT_minus_OC"])
-                        == np.sign(full_row["treatment_effect_OT_minus_OC"])
-                    )
-                ),
-                "loo_orthogonal_same_sign_fraction": float(
-                    np.mean(
-                        np.sign(block["orthogonal_treatment_residual"])
-                        == np.sign(full_row["orthogonal_treatment_residual"])
-                    )
-                ),
-                "loo_orthogonal_min": float(block["orthogonal_treatment_residual"].min()),
-                "loo_orthogonal_max": float(block["orthogonal_treatment_residual"].max()),
-            }
-        )
-    summary = pd.DataFrame(summaries)
+    # Map full-data directions once, then aggregate all genes in one vectorized
+    # groupby. This is O(genes x LOO), not one full-table scan per gene.
+    full_indexed = full.set_index("gene")
+    loo["aging_same_sign"] = np.sign(loo["aging_effect_OC_minus_Y"]) == np.sign(
+        loo["gene"].map(full_indexed["aging_effect_OC_minus_Y"])
+    )
+    loo["treatment_same_sign"] = np.sign(loo["treatment_effect_OT_minus_OC"]) == np.sign(
+        loo["gene"].map(full_indexed["treatment_effect_OT_minus_OC"])
+    )
+    loo["orthogonal_same_sign"] = np.sign(loo["orthogonal_treatment_residual"]) == np.sign(
+        loo["gene"].map(full_indexed["orthogonal_treatment_residual"])
+    )
+    loo_summary = loo.groupby("gene", observed=True).agg(
+        loo_aging_same_sign_fraction=("aging_same_sign", "mean"),
+        loo_treatment_same_sign_fraction=("treatment_same_sign", "mean"),
+        loo_orthogonal_same_sign_fraction=("orthogonal_same_sign", "mean"),
+        loo_orthogonal_min=("orthogonal_treatment_residual", "min"),
+        loo_orthogonal_max=("orthogonal_treatment_residual", "max"),
+    )
+    summary = full_indexed.join(loo_summary, how="left").reset_index()
     candidates = ["Igfbp2", "Pak3", "Abca1", "H1f10", "Hif1a", "Smad3"]
     candidate_table = summary.loc[summary["gene"].isin(candidates)].copy()
     candidate_table["candidate_status"] = candidate_table["gene"].map(
