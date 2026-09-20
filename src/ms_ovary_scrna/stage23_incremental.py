@@ -901,6 +901,35 @@ def run_axis_program_attribution(
         loo_orthogonal_max=("orthogonal_treatment_residual", "max"),
     )
     summary = full_indexed.join(loo_summary, how="left").reset_index()
+    aging_vector = full["aging_effect_OC_minus_Y"].to_numpy(dtype=float)
+    treatment_vector = full["treatment_effect_OT_minus_OC"].to_numpy(dtype=float)
+    parallel_vector = full["parallel_treatment_component"].to_numpy(dtype=float)
+    orthogonal_vector = full["orthogonal_treatment_residual"].to_numpy(dtype=float)
+    aging_norm = float(np.linalg.norm(aging_vector))
+    treatment_norm = float(np.linalg.norm(treatment_vector))
+    global_geometry = pd.DataFrame(
+        [
+            {
+                "n_genes": len(full),
+                "aging_norm": aging_norm,
+                "treatment_norm": treatment_norm,
+                "aging_treatment_cosine": float(
+                    np.dot(aging_vector, treatment_vector) / max(aging_norm * treatment_norm, 1e-12)
+                ),
+                "parallel_coefficient": float(full["global_parallel_coefficient"].iloc[0]),
+                "parallel_norm_over_treatment_norm": float(
+                    np.linalg.norm(parallel_vector) / max(treatment_norm, 1e-12)
+                ),
+                "orthogonal_norm_over_treatment_norm": float(
+                    np.linalg.norm(orthogonal_vector) / max(treatment_norm, 1e-12)
+                ),
+                "parallel_squared_fraction_of_treatment": float(
+                    np.dot(parallel_vector, parallel_vector)
+                    / max(np.dot(treatment_vector, treatment_vector), 1e-12)
+                ),
+            }
+        ]
+    )
     candidates = ["Igfbp2", "Pak3", "Abca1", "H1f10", "Hif1a", "Smad3"]
     candidate_table = summary.loc[summary["gene"].isin(candidates)].copy()
     candidate_table["candidate_status"] = candidate_table["gene"].map(
@@ -909,6 +938,7 @@ def run_axis_program_attribution(
     _write_tsv(summary, out / "GENE_AXIS_DECOMPOSITION.tsv")
     _write_tsv(loo, out / "GENE_AXIS_DECOMPOSITION_LOO.tsv.gz")
     _write_tsv(pd.DataFrame(rank_rows), out / "GENE_AXIS_RANK_STABILITY.tsv")
+    _write_tsv(global_geometry, out / "GENE_AXIS_GLOBAL_GEOMETRY.tsv")
     _write_tsv(candidate_table, out / "PRESPECIFIED_CANDIDATE_AXIS_ATTRIBUTION.tsv")
     coefficient = float(full["global_parallel_coefficient"].iloc[0])
     (out / "AXIS_PROGRAM_REPORT_CN.md").write_text(
@@ -1470,6 +1500,190 @@ def run_evidence_reconciliation(
     _update_state(stage_root, "06_evidence_reconciliation", "complete")
 
 
+def run_stage23_summary(
+    config: Mapping[str, Any], stage_root: Path, logger: Any, paths: Mapping[str, Path]
+) -> None:
+    del config, logger, paths
+    out = stage_root / "06_evidence_reconciliation"
+    key_rows: list[dict[str, Any]] = []
+
+    distribution = _read_tsv(
+        stage_root / "01_granulosa_distribution/CENTER_TAIL_DIRECTION_CLASSIFICATION.tsv"
+    )
+    opposed = (
+        distribution.loc[
+            distribution[["median_vs_p95", "mean_vs_p90"]]
+            .astype(str)
+            .eq("center_tail_opposed")
+            .any(axis=1),
+            "module",
+        ]
+        .astype(str)
+        .tolist()
+    )
+    key_rows.append(
+        {
+            "domain": "granulosa_distribution",
+            "endpoint": "center_tail_opposed_modules",
+            "value": ";".join(opposed),
+            "interpretation": "mean_or_median_does_not_represent_high_score_tail",
+        }
+    )
+
+    latent = _read_tsv(
+        stage_root / "01_granulosa_distribution/EXTERNAL_FROZEN_LATENT_CROSS_SEED_STABILITY.tsv"
+    )
+    for metric in ["median", "p90", "p95"]:
+        row = latent.loc[latent["value"].eq(metric) & latent["contrast"].eq("OT_vs_OC")]
+        if not row.empty:
+            record = row.iloc[0]
+            key_rows.append(
+                {
+                    "domain": "frozen_external_latent_axis",
+                    "endpoint": f"OT_vs_OC_{metric}_median_across_seeds",
+                    "value": record["median_effect"],
+                    "interpretation": "negative_is_toward_external_young_axis",
+                }
+            )
+
+    external = _read_tsv(
+        stage_root / "02_external_cohort_rescue/RECIPROCAL_EXTERNAL_VALIDATION.tsv"
+    )
+    for _, record in external.iterrows():
+        key_rows.append(
+            {
+                "domain": "second_mouse_external_cohort",
+                "endpoint": (
+                    f"{record['training_program']}__to__{record['independent_validation']}"
+                ),
+                "value": record["effect_aged_minus_young"],
+                "exact_permutation_p": record["exact_permutation_p_two_sided_plus_one"],
+                "interpretation": "positive_is_expected_age_direction",
+            }
+        )
+    concordance = _read_tsv(
+        stage_root / "02_external_cohort_rescue/CROSS_STUDY_GENE_EFFECT_CONCORDANCE.tsv"
+    )
+    for _, record in concordance.iterrows():
+        key_rows.append(
+            {
+                "domain": "gene_effect_concordance",
+                "endpoint": record["comparison"],
+                "value": record["spearman_rho"],
+                "interpretation": "descriptive_gene_rank_concordance",
+            }
+        )
+
+    geometry = _read_tsv(stage_root / "03_axis_program_attribution/GENE_AXIS_GLOBAL_GEOMETRY.tsv")
+    if not geometry.empty:
+        record = geometry.iloc[0]
+        for endpoint in [
+            "aging_treatment_cosine",
+            "parallel_coefficient",
+            "parallel_norm_over_treatment_norm",
+            "orthogonal_norm_over_treatment_norm",
+        ]:
+            key_rows.append(
+                {
+                    "domain": "gene_axis_decomposition",
+                    "endpoint": endpoint,
+                    "value": record[endpoint],
+                    "interpretation": "descriptive_geometry_not_causal_fraction",
+                }
+            )
+
+    communication = _read_tsv(
+        stage_root / "04_targeted_mechanism_triage/PRESPECIFIED_COMMUNICATION_CHAIN_TRIAGE.tsv"
+    )
+    for chain, block in communication.groupby("chain", observed=True):
+        key_rows.append(
+            {
+                "domain": "communication_hypothesis",
+                "endpoint": chain,
+                "value": int(block["passes_2_of_3_direction_gate"].sum()),
+                "denominator": len(block),
+                "interpretation": "directional_transcript_chain_only_not_causal_communication",
+            }
+        )
+
+    human = _read_tsv(stage_root / "05_human_conservation/HUMAN_FROZEN_PROGRAM_VALIDATION.tsv")
+    for _, record in human.iterrows():
+        key_rows.append(
+            {
+                "domain": "human_age_conservation",
+                "endpoint": record["program"],
+                "value": record["effect_older_minus_young"],
+                "exact_permutation_p": record["exact_permutation_p_two_sided_plus_one"],
+                "interpretation": "age_direction_only_not_human_treatment_evidence",
+            }
+        )
+    key = pd.DataFrame(key_rows)
+    _write_tsv(key, out / "STAGE23_KEY_RESULTS.tsv")
+
+    external_forward = external.iloc[0] if not external.empty else pd.Series(dtype=float)
+    external_reverse = external.iloc[1] if len(external) > 1 else pd.Series(dtype=float)
+    mouse_mouse = concordance.loc[concordance["comparison"].eq("GSE232309_vs_GSE267729")]
+    mouse_mouse_rho = (
+        float(mouse_mouse["spearman_rho"].iloc[0]) if not mouse_mouse.empty else np.nan
+    )
+    axis = geometry.iloc[0] if not geometry.empty else pd.Series(dtype=float)
+    human_lines = "\n".join(
+        f"- {row.program}: older−young={row.effect_older_minus_young:.3f}, "
+        f"exact P={row.exact_permutation_p_two_sided_plus_one:.3f}."
+        for row in human.itertuples()
+    )
+    chain_lines = "\n".join(
+        f"- {chain}: {int(block['passes_2_of_3_direction_gate'].sum())}/{len(block)} "
+        "components pass the 2-of-3 library direction gate."
+        for chain, block in communication.groupby("chain", observed=True)
+    )
+    opposed_text = ", ".join(opposed) or "none"
+    forward_effect = float(external_forward.get("effect_aged_minus_young", np.nan))
+    forward_p = float(external_forward.get("exact_permutation_p_two_sided_plus_one", np.nan))
+    reverse_effect = float(external_reverse.get("effect_aged_minus_young", np.nan))
+    reverse_p = float(external_reverse.get("exact_permutation_p_two_sided_plus_one", np.nan))
+    axis_cosine = float(axis.get("aging_treatment_cosine", np.nan))
+    axis_coefficient = float(axis.get("parallel_coefficient", np.nan))
+    parallel_ratio = float(axis.get("parallel_norm_over_treatment_norm", np.nan))
+    orthogonal_ratio = float(axis.get("orthogonal_norm_over_treatment_norm", np.nan))
+    report = (
+        "# Stage 23 incremental阶段总结\n\n"
+        "## 结论边界\n\n"
+        "本阶段只读复用Stage 15–16冻结结果，并引入第二小鼠年龄队列和一项人卵巢队列。"
+        "内部正式统计单位始终为9个library/pool，外部为donor。所有图均为独立图件，"
+        "没有把细胞或基因当作生物学重复。\n\n"
+        "## 主要结果\n\n"
+        f"1. Granulosa中心与尾部并不总是一致：{opposed_text}"
+        "显示中心和高分尾部治疗方向相反。\n"
+        "2. 冻结GSE267729 latent年龄轴在3个seed中显示内部OC median向aged方向移动，"
+        "OT的median/P90/P95均向young方向回移；但n=3下精确置换分辨率有限。\n"
+        f"3. 第二小鼠队列的正向冻结程序效应={forward_effect:.3f}"
+        f"（P={forward_p:.3f}），反向验证效应={reverse_effect:.3f}"
+        f"（P={reverse_p:.3f}）；"
+        f"两个公共小鼠队列整基因效应rho={mouse_mouse_rho:.3f}。因此跨研究泛化证据为混合/偏弱。\n"
+        f"4. 内部全基因治疗-年龄cosine={axis_cosine:.3f}，"
+        f"平行系数={axis_coefficient:.3f}，治疗向量范数中平行/正交比值分别为"
+        f"{parallel_ratio:.3f}/{orthogonal_ratio:.3f}。"
+        "这说明总体反向与治疗特异程序并存，几何分解不等于因果比例。\n"
+        "5. 预设通讯链仅达到转录方向一致性：\n"
+        f"{chain_lines}\n"
+        "6. 人类冻结程序方向：\n"
+        f"{human_lines}\n\n"
+        "## 保守解释\n\n"
+        "Stage 23加强了Granulosa作为内部主线的合理性，但没有把外部泛化提升为确定结论。"
+        "第二小鼠队列未稳定复现GSE267729整基因年龄方向；人类方向为正但精确置换未达到强支持。"
+        "Il6→Il6st与Fgf2→Fgfr2可作为实验候选，不能写成已证明的细胞通讯或MRJP1机制。"
+        "Stromal仍作为微环境异质性补充线，而非删除。\n"
+    )
+    (stage_root / "STAGE23_INCREMENTAL_REPORT_CN.md").write_text(report, encoding="utf-8")
+    _checkpoint(
+        out / "SUMMARY_CHECKPOINT.json",
+        "STAGE23_SUMMARY_COMPLETE",
+        n_key_results=len(key),
+    )
+    _update_state(stage_root, "07_stage23_summary", "complete", n_key_results=len(key))
+
+
 def _manifest(stage_root: Path) -> None:
     rows = []
     for path in sorted(stage_root.rglob("*")):
@@ -1500,6 +1714,7 @@ def run_stage23_incremental(
         ("04_targeted_mechanism_triage", run_targeted_mechanism_triage),
         ("05_human_conservation", run_human_conservation),
         ("06_evidence_reconciliation", run_evidence_reconciliation),
+        ("07_stage23_summary", run_stage23_summary),
     ]
     selected = set(selected_stages) if selected_stages is not None else None
     forced = set(force_stages or ())
