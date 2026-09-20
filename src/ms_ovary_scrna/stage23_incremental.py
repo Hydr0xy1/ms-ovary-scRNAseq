@@ -1744,9 +1744,9 @@ def run_stage23_incremental(
                 _update_state(stage_root, name, "failed", attempt=attempt, error=repr(exc))
         if not succeeded:
             logger.error("Stage23 step %s failed after retry; continuing independent steps", name)
-    _manifest(stage_root)
     if selected is not None:
         _update_state(stage_root, "overall", "partial", selected_stages=sorted(selected))
+        _manifest(stage_root)
         print("STAGE23_INCREMENTAL_PARTIAL_COMPLETE")
         return stage_root
     state = json.loads((stage_root / "RUN_STATE.json").read_text(encoding="utf-8"))
@@ -1761,6 +1761,7 @@ def run_stage23_incremental(
         "complete_with_failures" if failed else "complete",
         next_stage="manual_review_before_claims",
     )
+    _manifest(stage_root)
     print("STAGE23_INCREMENTAL_COMPLETE")
     print(f"OUTPUT={stage_root.relative_to(paths['root'])}")
     return stage_root
