@@ -18,6 +18,16 @@ if [[ ! -x "${ENV_DIR}/bin/Rscript" ]]; then
     r-rspectra r-irlba
 fi
 
+# scTenifoldNet/scTenifoldKnk and several CRAN dependencies contain compiled
+# C/C++/Fortran code.  A conda R installation refers to the conda compiler
+# wrappers in Makeconf, so keep the complete toolchain inside this isolated
+# prefix instead of relying on (or modifying) the system compiler setup.
+"${CONDA_BIN}" install -y -p "${ENV_DIR}" -c conda-forge \
+  c-compiler cxx-compiler fortran-compiler make pkg-config \
+  libcurl openssl libxml2
+
+export MAKEFLAGS="${MAKEFLAGS:--j8}"
+
 "${ENV_DIR}/bin/Rscript" - <<'RS'
 options(repos = c(CRAN = "https://cloud.r-project.org"), Ncpus = 8)
 needed <- c("scTenifoldNet", "scTenifoldKnk")
