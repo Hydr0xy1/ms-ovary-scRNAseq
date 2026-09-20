@@ -68,5 +68,9 @@ def test_pairwise_jaccard() -> None:
 
 def test_cpm_normalize_scales_each_cell() -> None:
     counts = pd.DataFrame({"c1": [1, 3], "c2": [2, 2]}, index=["g1", "g2"])
+    counts.index.name = "gene"
+    counts.columns.name = "cell"
     normalized = cpm_normalize(counts)
     assert np.allclose(normalized.sum(axis=0), 1_000_000)
+    assert normalized.index.name is None
+    assert normalized.columns.name is None

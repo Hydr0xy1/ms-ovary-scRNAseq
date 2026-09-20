@@ -263,7 +263,11 @@ def cpm_normalize(frame: pd.DataFrame) -> pd.DataFrame:
     library_sizes = frame.sum(axis=0)
     safe = library_sizes.replace(0, np.nan)
     normalized = frame.multiply(1_000_000 / safe, axis=1)
-    return normalized.fillna(0)
+    normalized = normalized.fillna(0)
+    # scTenifoldpy 0.4.0 creates a temporary column named ``gene`` during QC.
+    # Pandas >=2.2 rejects groupby("gene") when the index is also named gene,
+    # so keep biological labels but clear the non-semantic axis names.
+    return normalized.rename_axis(index=None, columns=None)
 
 
 def _module_genes(path: Path) -> dict[str, list[str]]:
