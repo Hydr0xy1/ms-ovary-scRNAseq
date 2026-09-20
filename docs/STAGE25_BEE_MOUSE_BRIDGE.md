@@ -69,3 +69,43 @@ The visual evidence must show mapping attrition, individual libraries, treatment
 and candidate specificity/robustness. Editable SVG text and embedded PDF fonts are required.
 The plot backend will follow the user's choice. No new public expression datasets or new
 machine-learning models are introduced. Stop after the requested report, ledger, model and QA.
+
+## Execution and audit notes
+
+The audited existing project plotting workflow is Python/matplotlib; this backend is used
+for every figure and exported preview. Formal entry points:
+
+```bash
+cd /root/autodl-tmp/ovary_scRNAseq
+/root/autodl-tmp/envs/ovary_stage24/bin/python scripts/38_stage25_bee_mouse_bridge.py
+/root/autodl-tmp/envs/ovary_stage24/bin/python scripts/39_stage25_report.py
+```
+
+Human empirical readouts trace to GSE202601 fibro-like states (verified against the
+upstream run configuration), not to a universal mammalian ageing signature. The Bombus
+source table lacks an explicit species accession; genus-level `Bombus_sp` is retained
+instead of inventing a species. The archive is sufficient as the bee source; no task
+or data migration is submitted to the old bee server.
+
+Geometry uses |cosine|<=0.30 for a descriptive orthogonal classification, negative cosine
+below -0.30 plus opposite scalar effects for age_opposite, and positive cosine above 0.30
+plus concordant scalar effects for age_parallel. The geometric label is library_sensitive
+when fewer than 7/9 library omissions retain its class or fewer than 8/9 retain treatment
+direction. Synthesis is stricter: any sign flip in the six contrast-specific omissions
+triggers library_sensitive, and Tier or cell-center direction disagreement triggers
+inconsistent. Split-OC sensitivity remains explicit rather than being treated as proof.
+
+VKO random controls use 2,000 draws from each module gene's 40 nearest eligible neighbors
+in standardized log-expression, detection, log-weighted-degree and log-edge-degree space.
+Each draw samples without replacement and excludes the tested module genes. All ten KO
+nodes (five candidates, five references) are excluded from the common background. A
+comparison fails matching quality when the largest absolute mean standardized feature
+difference exceeds 0.25. Null histograms and all diagnostic values are exported.
+
+`MODULE_SYNTHESIS.tsv` integrates the primary and sensitivity readouts; `VKO_CANDIDATE_ROBUSTNESS.tsv`
+links individual seeds, cell Tiers and OC-library omissions. Coupling and technical-depth
+correlations use nine library summaries descriptively and do not create new cell-level tests.
+
+The final report must retain null and non-evaluable findings. In particular, a stable
+Stage24 node is not automatically a Stage25 module-specific node, and lack of gene coverage
+is not evidence that a biological function is absent.
