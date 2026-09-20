@@ -35,6 +35,7 @@ GROUP_COLORS = {
     "OC": "#7A7A7A",
     "OT": "#D26A4A",
     "young": "#4C78A8",
+    "aged": "#7A7A7A",
     "older": "#B35C44",
 }
 PRIORITY_MODULES = (
@@ -771,7 +772,6 @@ def run_external_cohort_rescue(
     )
     _write_tsv(reciprocal_summary, out / "RECIPROCAL_EXTERNAL_VALIDATION.tsv")
     plot_frame = validation.rename(columns={"frozen_GSE267729_age_program_score": "score"}).copy()
-    plot_frame["group"] = plot_frame["group"].map({"young": "Y", "aged": "OC"})
     plot_frame["sample_id"] = plot_frame["donor_id"]
     _write_tsv(plot_frame, stage_root / "figures/source_data/gse232309_frozen_age_program.tsv")
     fig = _library_figure(
@@ -779,7 +779,7 @@ def run_external_cohort_rescue(
         "score",
         "GSE232309: frozen GSE267729 age program",
         "Frozen age-program score",
-        group_order=("Y", "OC"),
+        group_order=("young", "aged"),
     )
     _save_figure(fig, stage_root / "figures/gse232309_frozen_age_program")
     (out / "EXTERNAL_COHORT_REPORT_CN.md").write_text(
