@@ -31,6 +31,8 @@ fi
 export PATH="${ENV_DIR}/bin:${PATH}"
 export CONDA_PREFIX="${ENV_DIR}"
 export PKG_CONFIG_PATH="${ENV_DIR}/lib/pkgconfig:${ENV_DIR}/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export R_MAKEVARS_USER="${STAGE24_R_MAKEVARS:-${SCRIPT_DIR}/stage24_r.Makevars}"
 export MAKEFLAGS="${MAKEFLAGS:--j8}"
 
 "${ENV_DIR}/bin/Rscript" - <<'RS'

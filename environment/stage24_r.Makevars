@@ -1,0 +1,14 @@
+# Compile CRAN sources with the Ubuntu 22.04 host C/C++ toolchain.  The
+# conda-forge R 4.4 build is binary-compatible with these compilers, while the
+# provider's mixed-channel GCC/sysroot combination lacks C11 timespec_get.
+CC = /usr/bin/gcc
+CXX = /usr/bin/g++ -std=gnu++17
+CXX11 = /usr/bin/g++
+CXX14 = /usr/bin/g++
+CXX17 = /usr/bin/g++
+CXX20 = /usr/bin/g++
+
+# No Stage 24 package compiles Fortran, but retain the isolated conda wrapper
+# for transitive packages that may probe an FC/F77 command.
+FC = x86_64-conda-linux-gnu-gfortran
+F77 = x86_64-conda-linux-gnu-gfortran
