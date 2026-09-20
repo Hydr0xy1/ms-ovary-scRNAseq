@@ -1,0 +1,8 @@
+{
+  "status": "frozen_before_mouse_effect_inspection",
+  "source": "existing Project A local archive and server backup",
+  "formal_analysis_server": "connect.bjb1.seetacloud.com:28949",
+  "raw_matrices_transferred": false,
+  "new_public_expression_data": false,
+  "note": "Local operation extracts evidence only. Formal Stage 25 calculations run on the main server."
+}
