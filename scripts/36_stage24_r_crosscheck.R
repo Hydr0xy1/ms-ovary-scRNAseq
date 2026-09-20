@@ -12,16 +12,6 @@ output_path <- args[[2]]
 target_gene <- args[[3]]
 n_cores <- as.integer(args[[4]])
 
-# scTenifoldNet 1.4 uses a serial Rcpp loop in its optimized pcNet backend,
-# while the repeated linear algebra can still use the prefix-local OpenBLAS.
-# Set BLAS/OMP threads explicitly so the official cross-check honors the
-# requested CPU budget without replacing or monkey-patching package code.
-if (requireNamespace("RhpcBLASctl", quietly = TRUE)) {
-  RhpcBLASctl::blas_set_num_threads(max(1L, n_cores))
-  RhpcBLASctl::omp_set_num_threads(max(1L, n_cores))
-  cat("Configured BLAS threads:", RhpcBLASctl::blas_get_num_procs(), "\n")
-}
-
 suppressPackageStartupMessages({
   library(scTenifoldKnk)
 })
