@@ -19,6 +19,7 @@ fi
 
 "${BASE_PYTHON}" -m uv pip install \
   --python "${ENV_DIR}/bin/python" \
+  --no-deps \
   -r "${PROJECT_DIR}/environment/stage24-requirements.txt"
 "${BASE_PYTHON}" -m uv pip install \
   --python "${ENV_DIR}/bin/python" \
