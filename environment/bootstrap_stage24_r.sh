@@ -26,6 +26,11 @@ fi
   c-compiler cxx-compiler fortran-compiler make pkg-config \
   libcurl openssl libxml2
 
+# Rscript is invoked by absolute path rather than through `conda run`, so make
+# the prefix-local compiler wrappers and pkg-config metadata visible explicitly.
+export PATH="${ENV_DIR}/bin:${PATH}"
+export CONDA_PREFIX="${ENV_DIR}"
+export PKG_CONFIG_PATH="${ENV_DIR}/lib/pkgconfig:${ENV_DIR}/share/pkgconfig:${PKG_CONFIG_PATH:-}"
 export MAKEFLAGS="${MAKEFLAGS:--j8}"
 
 "${ENV_DIR}/bin/Rscript" - <<'RS'
