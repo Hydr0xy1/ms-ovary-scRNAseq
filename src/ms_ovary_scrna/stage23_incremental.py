@@ -1025,7 +1025,8 @@ def run_targeted_mechanism_triage(
             weights = target.set_index("gene").reindex(genes)["score"].astype(float)
             weights = weights / weights.abs().sum()
             target_score = expression["Granulosa"][genes].mul(weights, axis=1).sum(axis=1)
-            frame = target_score.rename("activity").reset_index(names="sample_id")
+            frame = target_score.rename("activity").reset_index()
+            frame = frame.rename(columns={frame.columns[0]: "sample_id"})
             frame["group"] = frame["sample_id"].str.split("_").str[0]
             source_rows.append(
                 frame.assign(
