@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ms_ovary_scrna.stage24_virtual_knockout import (
+    _neutral_sc_tenifold_qc_kwargs,
     balanced_sample,
     choose_expression_matched_references,
     cpm_normalize,
@@ -74,3 +75,9 @@ def test_cpm_normalize_scales_each_cell() -> None:
     assert np.allclose(normalized.sum(axis=0), 1_000_000)
     assert normalized.index.name is None
     assert normalized.columns.name is None
+
+
+def test_neutral_qc_kwargs_match_sctenifoldpy_040_api() -> None:
+    kwargs = _neutral_sc_tenifold_qc_kwargs()
+    assert kwargs["max_mito_ratio"] == 1
+    assert "max_mt_ratio" not in kwargs

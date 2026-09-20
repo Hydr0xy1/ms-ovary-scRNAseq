@@ -270,6 +270,20 @@ def cpm_normalize(frame: pd.DataFrame) -> pd.DataFrame:
     return normalized.rename_axis(index=None, columns=None)
 
 
+def _neutral_sc_tenifold_qc_kwargs() -> dict[str, float | bool]:
+    """Return valid scTenifoldpy 0.4.0 QC keys with neutral thresholds."""
+
+    return {
+        "min_lib_size": 0,
+        "remove_outlier_cells": False,
+        "min_percent": 0,
+        "max_mito_ratio": 1,
+        "min_exp_avg": 0,
+        "min_exp_sum": 0,
+        "plot": False,
+    }
+
+
 def _module_genes(path: Path) -> dict[str, list[str]]:
     with path.open(encoding="utf-8") as handle:
         values = yaml.safe_load(handle)
@@ -638,7 +652,6 @@ def _instantiate_from_tensor(tensor: pd.DataFrame, cfg: Mapping[str, Any]) -> An
         ko_method="default",
         strict_lambda=0,
         ma_kws=dict(cfg["manifold_alignment"]),
-        dr_kws={"n_ko_genes": 1},
     )
     model.shared_gene_names = tensor.index.astype(str).tolist()
     model.tensor_dict["WT"] = tensor
@@ -756,15 +769,7 @@ def _run_definition(
             ko_genes=targets[0],
             ko_method="default",
             strict_lambda=0,
-            qc_kws={
-                "min_lib_size": 0,
-                "remove_outlier_cells": False,
-                "min_percent": 0,
-                "max_mt_ratio": 1,
-                "min_exp_avg": 0,
-                "min_exp_sum": 0,
-                "plot": False,
-            },
+            qc_kws=_neutral_sc_tenifold_qc_kwargs(),
             nc_kws={
                 **dict(cfg["network"]),
                 "random_state": seed,
@@ -774,7 +779,6 @@ def _run_definition(
                 "random_state": seed,
             },
             ma_kws=dict(cfg["manifold_alignment"]),
-            dr_kws={"n_ko_genes": 1},
         )
         with threadpool_limits(limits=1):
             model.run_step("qc")
@@ -876,19 +880,10 @@ def _run_python_crosscheck(
         ko_genes=target,
         ko_method="default",
         strict_lambda=0,
-        qc_kws={
-            "min_lib_size": 0,
-            "remove_outlier_cells": False,
-            "min_percent": 0,
-            "max_mt_ratio": 1,
-            "min_exp_avg": 0,
-            "min_exp_sum": 0,
-            "plot": False,
-        },
+        qc_kws=_neutral_sc_tenifold_qc_kwargs(),
         nc_kws={**dict(cfg["network"]), "random_state": random_state},
         td_kws={**dict(cfg["tensor_decomposition"]), "random_state": random_state},
         ma_kws=dict(cfg["manifold_alignment"]),
-        dr_kws={"n_ko_genes": 1},
     )
     with threadpool_limits(limits=1):
         model.run_step("qc")
