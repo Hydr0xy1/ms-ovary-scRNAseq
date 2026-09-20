@@ -1146,7 +1146,9 @@ def run_human_conservation(
         "本阶段先完成sample/age/cell-type可恢复性门控并复用版本化one-to-one ortholog表。\n\n"
         + (
             "门控通过，已按donor聚合raw counts，并将预先冻结的小鼠Granulosa年龄程序"
-            "经Ensembl one-to-one ortholog映射后投影到8位donor。该分析只检验年龄方向保守性，"
+            "经版本化、无歧义的mouse-human ortholog映射后投影到8位donor。"
+            "已有映射沿用Ensembl one-to-one，其余用g:Profiler single-target ortholog补充。"
+            "该分析只检验年龄方向保守性，"
             "不代表MRJP1在人类中的治疗证据。\n"
             if gate_passed
             else "门控未通过，未下载或投影人类表达矩阵，也不输出人类有效性结论。\n"
@@ -1236,6 +1238,9 @@ def _extend_human_ortholog_mapping(
     mapping_path = out / "STAGE23_ONE_TO_ONE_ORTHOLOG_MAPPING.tsv"
     existing = _read_tsv(mapping_path)
     if not existing.empty and set(mouse_genes).issubset(set(existing["mouse_gene"])):
+        empty_target = existing["human_gene"].fillna("").astype(str).str.len().eq(0)
+        existing.loc[empty_target, "mapping_status"] = "no_unambiguous_single_target_ortholog"
+        _write_tsv(existing, mapping_path)
         return existing
     base = _read_tsv(root / "results/deep_dive_stage16_ml/08_cross_species/ORTHOLOG_MAPPING.tsv")
     records = base.to_dict("records") if not base.empty else []
@@ -1271,10 +1276,10 @@ def _extend_human_ortholog_mapping(
         for gene in missing:
             incoming = result.get("incoming", pd.Series(index=result.index, dtype=str))
             block = result.loc[incoming.astype(str).eq(gene)]
-            human_symbols = block.get("name", pd.Series(dtype=str)).dropna().astype(str).unique()
-            human_ids = (
-                block.get("ortholog_ensg", pd.Series(dtype=str)).dropna().astype(str).unique()
-            )
+            human_symbols = block.get("name", pd.Series(dtype=str)).dropna().astype(str)
+            human_symbols = human_symbols.loc[human_symbols.str.len().gt(0)].unique()
+            human_ids = block.get("ortholog_ensg", pd.Series(dtype=str)).dropna().astype(str)
+            human_ids = human_ids.loc[human_ids.str.len().gt(0)].unique()
             # Ambiguous one-to-many results are recorded but never projected.
             if len(human_symbols) == 1 and len(human_ids) == 1:
                 row = block.iloc[0]
@@ -1331,7 +1336,7 @@ def _human_program_score(
         .isin(["ensembl_one_to_one", "gprofiler_single_target_ortholog"])
     ].drop_duplicates("human_gene")
     if len(mapped) < 20:
-        raise RuntimeError(f"Only {len(mapped)} one-to-one genes overlap human counts")
+        raise RuntimeError(f"Only {len(mapped)} unambiguous orthologs overlap human counts")
     expression = _log_cpm(counts[mapped["human_gene"].astype(str).tolist()])
     standardized = expression.subtract(expression.mean(axis=0), axis=1)
     standardized = standardized.div(expression.std(axis=0, ddof=1).replace(0, np.nan), axis=1)
@@ -1387,7 +1392,7 @@ def _run_human_frozen_projection(root: Path, out: Path) -> tuple[pd.DataFrame, p
                 "effect_older_minus_young": effect,
                 "exact_permutation_p_two_sided_plus_one": pvalue,
                 "n_allocations": n_allocations,
-                "n_one_to_one_program_genes": n_genes,
+                "n_unambiguous_ortholog_program_genes": n_genes,
                 "statistical_unit": "human_donor",
                 "interpretation": "age_direction_conservation_not_treatment_evidence",
             }
