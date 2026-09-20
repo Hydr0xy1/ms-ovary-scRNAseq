@@ -24,6 +24,7 @@ def main():
         'bombus_gene_evidence.tsv.gz': archive + '05_蜂端关键证据/Bombus单核/tables/core_gene_evidence_matrix.tsv',
         'apis_fly_human_mapping.tsv.gz': deep + 'server_extension/results/deep_mining_20260719/bee_human_program_projection/Apis_Dmel_human_ortholog_bridge.tsv.gz',
         'human_mouse_strict_pairs.tsv.gz': deep + 'next_round_20260719/mouse_ovary_age_bridge/human_mouse_strict_1to1_pairs.tsv',
+        'apis_human_alternative_mappings.tsv.gz': deep + 'next_round_20260719/p0_orthology_projection/all_mapping_tier_pairs.tsv.gz',
         'human_readout_evidence.tsv.gz': branch + 'step30_final_node_state_program_model_20260505_193854/tables/final_program_readout_summary.tsv',
         'bee_prior_registry.tsv.gz': branch + 'step29_genelevel_gsr_v32_forced_leiden_20260505_184854/01_clean_bee_registry/01_clean_bee_registry_long.tsv',
         'core159_mapping_review.tsv.gz': 'server_backup/branches/branch_bee_human_ovary_atlas_20260311/results/bee/step07_manual_pilot_capture/scaleup_core159_20260315_015743/final_core159_release_20260317_162435/tables/step07_core159_full.consensus.tsv',

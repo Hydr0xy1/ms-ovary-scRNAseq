@@ -152,11 +152,11 @@ def create_ledger(root, out):
     for r in bombus.itertuples():
         apis_id = _id(r.apis_gene_id_1to1)
         text = f'{r.dmel_symbols} {r.dmel_descriptions} {annotation.get(apis_id, "")}'
-        add(r.bombus_gene, 'Bombus_terrestris', 'ProjectA_Bombus_snRNA_Stage29',
+        add(r.bombus_gene, 'Bombus_sp', 'ProjectA_Bombus_snRNA_Stage29',
             f'cluster_{r.cluster};{r.signature_modules}', r.evidence_tier,
             True, False, r.evidence_tier == 'Tier3_supporting', text,
             'bombus_gene_evidence.tsv.gz', r.source_row_1based, apis_id,
-            note=f'Apis mapping: {r.apis_mapping_status}; upstream species label retained from project.')
+            note=f'Apis mapping: {r.apis_mapping_status}; frozen table identifies genus; species not inferred.')
     axis_map = {'lipid_metabolism_redox': 'lipid_sterol_redox',
                 'stress_proteostasis': 'proteostasis_autophagy'}
     for r in human.itertuples():
@@ -244,7 +244,8 @@ def mapping_audit(root, out, ledger):
                           mapping_coverage=float(status.ne('unmapped').mean()),
                           strict_mapping_coverage=float(status.eq('one_to_one').mean()),
                           limitation='Frozen strict human-mouse table does not expose discarded alternative pairs.'))
-    write_tsv(audit, out / 'ORTHOLOG_MAPPING_AUDIT.tsv')
+    for row in audit:
+        row['mapping_reference'] = 'Ensembl_strict_chain'
     eligible = detail.strict_one_to_one & ~detail.hypothesis_only & detail.module.isin(MODULES)
     definitions = []
     for scope, mask in {
@@ -258,6 +259,42 @@ def mapping_audit(root, out, ledger):
             definitions.append(dict(scope=scope, module=module, mouse_gene=gene,
                                     n_source_genes=d.source_gene.nunique(),
                                     evidence_ids=';'.join(sorted(set(d.evidence_id)))))
+    # Orthogonal frozen protein-RBH reference: a sensitivity analysis, not a claim
+    # of evolutionarily proven one-to-one orthology. Keep every audited alternative.
+    alternatives = _source(root, 'apis_human_alternative_mappings.tsv.gz')
+    rb = alternatives[alternatives.mapping_tier.eq('diamond_rbh_direct_1to1')]
+    if rb.apis_gene_id.duplicated().any() or rb.human_symbol.duplicated().any():
+        raise ValueError('Frozen reciprocal-best-hit table is not reciprocal unique')
+    rbmap = dict(zip(rb.apis_gene_id, rb.human_symbol))
+    rr = []
+    for r in ledger[ledger.direct_bee_derived].itertuples():
+        human = rbmap.get(r.apis_gene_id, '')
+        mice = hmap.get(human, [])
+        if len(mice) > 1:
+            raise ValueError('Ambiguous symbol in strict human–mouse reference')
+        rr.append(dict(evidence_id=r.evidence_id, source_species=r.source_species,
+                       source_gene=r.source_gene, module=r.module, human_gene=human,
+                       mouse_gene=mice[0] if len(mice) == 1 else '',
+                       hypothesis_only=r.hypothesis_only,
+                       mapping_reference='protein_RBH_reciprocal_unique_sensitivity',
+                       mapping_status='one_to_one_RBH_candidate' if len(mice) == 1 else 'unmapped'))
+    rbdetail = pd.DataFrame(rr)
+    write_tsv(rbdetail, out / 'RBH_MAPPING_DETAIL.tsv')
+    for (species, module), d in rbdetail.groupby(['source_species', 'module']):
+        d = d.drop_duplicates('source_gene')
+        n = int(d.mouse_gene.ne('').sum())
+        audit.append(dict(source_species=species, module=module, original_gene_count=len(d),
+                          successfully_mapped=n, one_to_one=n, one_to_many=0,
+                          non_strict_single_candidate=0, unmapped=len(d)-n,
+                          mapping_coverage=n/len(d), strict_mapping_coverage=np.nan,
+                          mapping_reference='protein_RBH_reciprocal_unique_sensitivity',
+                          limitation='1:1 within reciprocal protein hits, not proven evolutionary 1:1 orthology.'))
+    mask = rbdetail.mouse_gene.ne('') & ~rbdetail.hypothesis_only & rbdetail.module.isin(MODULES)
+    for (module, gene), d in rbdetail[mask].groupby(['module', 'mouse_gene']):
+        definitions.append(dict(scope='bee_RBH_sensitivity', module=module, mouse_gene=gene,
+                                n_source_genes=d.source_gene.nunique(),
+                                evidence_ids=';'.join(sorted(set(d.evidence_id)))))
+    write_tsv(audit, out / 'ORTHOLOG_MAPPING_AUDIT.tsv')
     definitions = pd.DataFrame(definitions)
     write_tsv(definitions, out / 'FROZEN_MOUSE_MODULES.tsv')
     return definitions

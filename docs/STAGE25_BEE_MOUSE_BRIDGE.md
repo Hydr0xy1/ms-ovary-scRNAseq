@@ -23,6 +23,10 @@ main mouse server. Project A contributes small frozen evidence/mapping tables.
   mappings in the audit; never select the first hit or manufacture unique feature names.
 - Human–mouse mapping uses the frozen reciprocal-unique NCBI table. Entries absent from
   this strict table are unmapped in the frozen reference, not proven evolutionary absences.
+- An existing reciprocal protein-best-hit reference is evaluated separately as
+  `bee_RBH_sensitivity`. Its 1:1 cardinality is algorithmic and is not equated with
+  evolutionarily proven one-to-one orthology. This reference was added after the strict
+  mapping-coverage audit and before inspection of any mouse effect estimates.
 
 ## Library inference
 
