@@ -1240,33 +1240,68 @@ def _extend_human_ortholog_mapping(
     base = _read_tsv(root / "results/deep_dive_stage16_ml/08_cross_species/ORTHOLOG_MAPPING.tsv")
     records = base.to_dict("records") if not base.empty else []
     available = set(base["mouse_gene"].astype(str)) if not base.empty else set()
-    from .stage16_ml import _query_one_to_one_orthologs
-
+    missing = [str(gene) for gene in mouse_genes if str(gene) not in available]
     query_time = datetime.now(timezone.utc).isoformat()
-    for gene in mouse_genes:
-        if gene in available:
-            continue
-        rows, error = _query_one_to_one_orthologs(str(gene), "116", attempts=2)
-        if rows:
-            for row in rows:
-                row.update(
+    if missing:
+        import requests
+
+        endpoint = "https://biit.cs.ut.ee/gprofiler/api/orth/orth/"
+        response = requests.post(
+            endpoint,
+            json={
+                "organism": "mmusculus",
+                "target": "hsapiens",
+                "query": missing,
+                "numeric_namespace": "ENTREZGENE_ACC",
+            },
+            timeout=240,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        _write_json(
+            {
+                "endpoint": endpoint,
+                "query_date_utc": query_time,
+                "n_queries": len(missing),
+                "meta": payload.get("meta", {}),
+            },
+            out / "GPROFILER_ORTHOLOGY_QUERY_META.json",
+        )
+        result = pd.DataFrame(payload.get("result", []))
+        for gene in missing:
+            incoming = result.get("incoming", pd.Series(index=result.index, dtype=str))
+            block = result.loc[incoming.astype(str).eq(gene)]
+            human_symbols = block.get("name", pd.Series(dtype=str)).dropna().astype(str).unique()
+            human_ids = (
+                block.get("ortholog_ensg", pd.Series(dtype=str)).dropna().astype(str).unique()
+            )
+            # Ambiguous one-to-many results are recorded but never projected.
+            if len(human_symbols) == 1 and len(human_ids) == 1:
+                row = block.iloc[0]
+                records.append(
                     {
+                        "mouse_gene": gene,
+                        "mouse_ensembl_gene_id": row.get("converted", ""),
+                        "human_gene": human_symbols[0],
+                        "human_ensembl_gene_id": human_ids[0],
+                        "homology_type": "single_target_ortholog",
+                        "mapping_status": "gprofiler_single_target_ortholog",
+                        "ensembl_release": "gprofiler_versioned_source",
                         "query_date_utc": query_time,
-                        "mapping_source": "Ensembl REST homology endpoint",
+                        "mapping_source": "g:Profiler orthology API",
                     }
                 )
-                records.append(row)
-        else:
-            records.append(
-                {
-                    "mouse_gene": str(gene),
-                    "human_gene": "",
-                    "mapping_status": error or "no_one_to_one_mapping",
-                    "ensembl_release": "116",
-                    "query_date_utc": query_time,
-                    "mapping_source": "Ensembl REST homology endpoint",
-                }
-            )
+            else:
+                records.append(
+                    {
+                        "mouse_gene": gene,
+                        "human_gene": "",
+                        "mapping_status": "no_unambiguous_single_target_ortholog",
+                        "ensembl_release": "gprofiler_versioned_source",
+                        "query_date_utc": query_time,
+                        "mapping_source": "g:Profiler orthology API",
+                    }
+                )
     mapping = pd.DataFrame(records)
     mapping = mapping.drop_duplicates(["mouse_gene", "human_gene"], keep="first")
     _write_tsv(mapping, mapping_path)
@@ -1291,7 +1326,9 @@ def _human_program_score(
     )
     mapped = mapped.loc[
         mapped["human_gene"].astype(str).isin(counts.columns)
-        & mapped["mapping_status"].astype(str).eq("ensembl_one_to_one")
+        & mapped["mapping_status"]
+        .astype(str)
+        .isin(["ensembl_one_to_one", "gprofiler_single_target_ortholog"])
     ].drop_duplicates("human_gene")
     if len(mapped) < 20:
         raise RuntimeError(f"Only {len(mapped)} one-to-one genes overlap human counts")
