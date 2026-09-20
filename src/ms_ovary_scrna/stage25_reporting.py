@@ -102,6 +102,17 @@ def module_synthesis(out):
                           loo_residual_correlation_max=max(lv),
                           inference='descriptive_only; group means removed; not a functional-coupling test'))
     write_tsv(pairs, out / 'MODULE_COUPLING_DESCRIPTIVE.tsv')
+    tech = load(out, 'LIBRARY_TECHNICAL_AUDIT.tsv')
+    confound=[]
+    for (pop,tier,scope,module,metric), d in scores.groupby(['cell_type','cell_tier','scope','module','metric']):
+        d=d.merge(tech[tech.cell_type.eq(pop)&tech.cell_tier.eq(tier)],on='library_id')
+        for feature in ['median_umi','median_pct_mt']:
+            if d.score.notna().all():
+                confound.append(dict(cell_type=pop,cell_tier=tier,scope=scope,module=module,metric=metric,
+                                     technical_feature=feature,n_libraries=len(d),
+                                     spearman=float(spearmanr(d.score,d[feature]).statistic),
+                                     interpretation='descriptive_library_correlation; technical and biological effects may be confounded'))
+    write_tsv(confound,out/'MODULE_TECHNICAL_CORRELATIONS.tsv')
     return result
 
 
@@ -152,9 +163,15 @@ def node_model(root, out):
                 else 'secondary_candidate' if target in ['Hif1a','Abca1']
                 else 'deprioritized_unstable' if target == 'Igfbp2' else 'conditional_state_candidate')
         pathway, function, endpoint = pathways[target]
+        observed=candidates[candidates.scope.eq('bee_RBH_sensitivity')&candidates.n_overlap.gt(0)]
+        actual_programs=';'.join(observed.module)
+        actual_genes=';'.join(sorted(set(';'.join(observed.overlap_genes.dropna()).split(';'))-{''}))
         rows.append(dict(candidate_node=target, candidate_status=role,
                          network_perturbed_program=pathway,
-                         observed_transcriptomic_readout='See MODULE_SYNTHESIS and VKO_REAL_TRANSCRIPTOMIC_READOUTS; unsigned VKO cannot predict sign.',
+                         network_program_evidence='Stage24 context / prespecified hypothesis; Stage25 specificity assessed separately',
+                         stage25_overlapping_RBH_programs=actual_programs,
+                         observed_transcriptomic_readout=actual_genes,
+                         readout_interpretation='Real age/treatment signs in VKO_REAL_TRANSCRIPTOMIC_READOUTS; unsigned VKO cannot predict sign.',
                          hypothesized_function=function, functional_validation_endpoint=endpoint,
                          stage24_seed_jaccard=s.median_pairwise_top_fraction_jaccard,
                          stage24_loo_jaccard_min=float(l.jaccard_vs_full_seed_intersection.min()),
@@ -196,12 +213,12 @@ def figures(root, out):
     for j, (ref, color, label) in enumerate([('Ensembl_strict_chain', '#8b98a6', 'Strict chain'),
                                            ('protein_RBH_reciprocal_unique_sensitivity', '#5d8e9e', 'Protein RBH sensitivity')]):
         block = d[d.mapping_reference.eq(ref)].set_index('module').reindex(MODULES)
-        ax.barh(y + (j-.5)*.32, 100*block.mapping_coverage, height=.3, color=color, label=label)
+        ax.barh(y + (j-.5)*.32, 100*block.one_to_one/block.original_gene_count, height=.3, color=color, label=label)
     ax.set_yticks(y, [SHORT[x] for x in MODULES]); ax.invert_yaxis()
-    ax.set_xlabel('Mapped source genes (%)'); ax.legend(loc='lower right', fontsize=6)
+    ax.set_xlabel('One-to-one source genes within each reference (%)'); ax.legend(loc='lower right', fontsize=6)
     ax.set_title('Frozen Apis mapping coverage')
     save(fig, '01_mapping_coverage', d, 'Mapping reference changes usable coverage.',
-         'Denominator: frozen source genes per module. Mapping success includes alternatives; strict 1:1 counts are in source data. RBH is a sensitivity reference.')
+         'Denominator: frozen source genes per module. Bars use one_to_one/original_gene_count. RBH cardinality is algorithmic, not proven evolutionary 1:1 orthology.')
 
     scores = load(out, 'MODULE_LIBRARY_SCORES.tsv')
     syn = load(out, 'MODULE_SYNTHESIS.tsv')
@@ -222,7 +239,7 @@ def figures(root, out):
         ax.axvline(0, color='.8', lw=.7)
         ax.set_yticks(range(len(modules)), [SHORT[m] for m in modules]); ax.invert_yaxis()
         ax.set_xlabel('Module log2(CPM + 1), centered across nine libraries')
-        ax.set_title(f'{pop}: strict bridge modules'); ax.legend(ncol=3, loc='best')
+        ax.set_title(f'{pop}: strict bridge modules\nn = 3 independent libraries per group'); ax.legend(ncol=3, loc='best')
         save(fig, f'02_library_scores_{pop}', d, 'Individual libraries reveal within-population module movement.',
              'Each dot is one independent library/pool (n=3/group); short ticks are group means. No cell-level significance tests.')
 
@@ -239,6 +256,28 @@ def figures(root, out):
         ax.legend(loc='lower right',fontsize=6)
         save(fig, f'03_geometry_{pop}', d, 'Age-opposite and orthogonal components require separate interpretation.',
              'Gene-space directions from equal-library group means; gray band |cosine|<=0.3. Descriptive geometry shares OC; split-OC and LOO sensitivities are in analysis tables. Orthogonality does not imply protection.')
+
+        sensitivity=load(out,'MODULE_EXACT_PERMUTATION.tsv')
+        s=sensitivity[sensitivity.scope.eq('bridge_supported')&sensitivity.cell_type.eq(pop)
+                      &sensitivity.contrast.eq('OT_vs_OC')].copy()
+        choices=[('Tier1','pseudobulk_logcpm','Pseudobulk'),('Tier1','cell_mean','Cell mean'),
+                 ('Tier1','cell_median','Cell median'),('Tier1','cell_q90','Cell Q90'),
+                 ('Tier1','subtype_standardized_mean','Subtype fixed'),
+                 ('Tier1_Tier2','pseudobulk_logcpm','Tier1 + Tier2')]
+        values=np.full((len(MODULES),len(choices)),np.nan)
+        for i,module in enumerate(MODULES):
+            for j,(tier,metric,_) in enumerate(choices):
+                row=s[s.module.eq(module)&s.cell_tier.eq(tier)&s.metric.eq(metric)]
+                if len(row): values[i,j]=row.effect.iloc[0]
+        fig,ax=plt.subplots(figsize=(7.2,3.8))
+        cmap=mpl.colors.ListedColormap(['#c79790','#eeeeee','#7ca497']); cmap.set_bad('#f7f7f7')
+        ax.imshow(np.sign(values),vmin=-1,vmax=1,cmap=cmap,aspect='auto')
+        for i,j in itertools.product(range(len(MODULES)),range(len(choices))):
+            ax.text(j,i,f'{values[i,j]:+.3f}' if np.isfinite(values[i,j]) else 'NA',ha='center',va='center',fontsize=6)
+        ax.set_xticks(range(len(choices)),[x[2] for x in choices],rotation=25,ha='right')
+        ax.set_yticks(y,[SHORT[m] for m in MODULES]); ax.set_title(f'{pop}: treatment direction sensitivity')
+        save(fig,f'06_sensitivity_{pop}',s,'Different score summaries can change the treatment direction.',
+             'OT minus OC, n=3 libraries/group. Color denotes effect sign only; numbers retain metric-specific units, which must not be compared across columns. NA: fewer than three genes. Cell scores are log1p(10,000-normalized counts); pseudobulk scores are log2(CPM+1).')
 
     v = load(out, 'VKO_MODULE_ENRICHMENT.tsv')
     for scope, suffix in [('bridge_supported','strict'),('bee_RBH_sensitivity','rbh')]:
@@ -263,7 +302,8 @@ def figures(root, out):
         fig,ax=plt.subplots(figsize=(7.2,3.4))
         for j,target in enumerate(TARGETS):
             b=d[d.target_gene.eq(target)].set_index('module').reindex(MODULES)
-            ax.scatter(b.overlap_difference,y+(j-2)*.12,s=17,marker=['o','s','^','D','v'][j],label=target)
+            ax.scatter(b.overlap_difference,y+(j-2)*.12,s=17,marker=['o','s','^','D','v'][j],
+                       color=['#7f97aa','#b5a08c','#9aaa96','#ae94a6','#8daaab'][j],label=target)
         ax.axvline(0,color='.65',lw=.8)
         ax.set_yticks(y,[SHORT[m] for m in MODULES]); ax.invert_yaxis()
         ax.set_xlabel('Stable overlap: candidate minus matched reference')
@@ -282,6 +322,18 @@ def report(root, out, synthesis, nodes, figure_manifest):
     diagnostics=load(out,'VKO_MATCHING_DIAGNOSTICS.tsv')
     tests=load(out,'MODULE_EXACT_PERMUTATION.tsv')
     lines=['# Stage 25 蜂—小鼠卵巢功能韧性桥接报告', '',
+           '**主要结论：跨项目证据支持有限的年龄反向转录移动，以 RNA 加工/翻译最一致；'
+           '尚未建立 ECM—线粒体—蛋白稳态—脂质耦合改善、保护性正交重塑或节点特异的保守机制。**', '',
+           '- Granulosa：RNA 加工/翻译和线粒体模块的治疗方向较一致；RNA 主模块治疗 exact P=0.10。'
+           '线粒体自然年龄中心效应弱（OC−Y P=0.80），不能据治疗上调直接称为恢复。',
+           '- Stromal：RNA 加工/翻译跨 Tier、中心/尾部及 subtype 标准化较一致。'
+           '严格线粒体与膜模块的 pseudobulk 和细胞均值方向不同，不能称为稳健恢复。',
+           '- ECM 在严格链映射下只有2个支持基因，不能正式评分；RBH 敏感性下 Stromal ECM 有13个表达基因，'
+           '呈年龄反向的描述性变化（治疗 P=0.20），尚不足以证明 ECM 功能改善。',
+           '- 五节点均未通过新增的匹配随机集＋reference 特异性标准。Smad3 保留 Stage24 稳定性优先级；'
+           'Igfbp2 暂降级。',
+           '- 主分析及 RBH 敏感性均未得到稳健的 treatment_specific_orthogonal 模块分类。'
+           '这限制本次桥接对 H2 的支持，不否定之前全转录组分析中的治疗特异分量。', '',
            '## 结论范围', '',
            '本阶段检验冻结的蜂启发功能模块在 MRJP1 小鼠卵巢中的转录读数与候选网络扰动。'
            '所有生物学比较均以 library/pool 为单位，每组 n=3；结果不能证明卵巢功能恢复、保护性因果机制或整体年轻化。', '',
@@ -303,6 +355,9 @@ def report(root, out, synthesis, nodes, figure_manifest):
               '每个 library 内先汇总 raw counts，再等权汇总 library。负/正效应本身不能表示损伤/保护。', '',
               '完整三比较、残余偏离、Tier1 与 Tier1+Tier2、细胞均值/中位数/90% 分位数、'
               '固定 subtype 权重的结果见 MODULE_EXACT_PERMUTATION.tsv 和 MODULE_SYNTHESIS.tsv。', '',
+              '严格生殖支持/分泌模块仅含 Cadps2、Sec13、Wls 三基因，主要反映运输/分泌相关 readout，'
+              '不能从模块名称推断卵泡成熟或生殖功能恢复。Granulosa RNA 治疗效应超过年龄中心下降量，'
+              'OT−Y 仍有正向残余偏离，也不等同于精确回到年轻状态。', '',
               '## 2. 年龄回移与治疗特异重塑', '',
               '每个模块在多基因空间中分解治疗方向相对年龄方向的投影与正交分量。'
               '年龄与治疗共用 OC，可能产生负相关偏差，因此另做 split-OC 描述性检验；'
@@ -330,6 +385,11 @@ def report(root, out, synthesis, nodes, figure_manifest):
               'VKO_CANDIDATE_ROBUSTNESS.tsv 同时记录每个 seed、Tier1+Tier2 和三个 OC LOO 场景。'
               'scTenifold 距离无方向；VKO_REAL_TRANSCRIPTOMIC_READOUTS.tsv 中的年龄/治疗正负号来自已有真实转录比较，'
               '不能解释为虚拟敲除预测了这些方向。', '',
+              '严格映射模块进入冻结网络后，仅 RNA、膜和蛋白稳态分别保留4、3、4个可检验基因；'
+              '其他模块低于3基因阈值。因此“无特异富集”包含明显的网络背景覆盖限制。'
+              'RBH 敏感性扩大后，主候选的最小匹配随机 P 仍为约0.122，未带来独立的候选特异支持。'
+              'Smad3 的 RBH 膜模块命中 Mctp1/Tanc2、脂质模块命中 Acsbg1/Elovl6；'
+              '这些观察重叠可以设计 readout，但不能据重叠本身认定选择性机制。', '',
               '## 5. Library、分布和细胞组成敏感性', '']
     bad=synthesis[synthesis.scope.isin(['bridge_supported','bee_RBH_sensitivity'])&synthesis.treatment_sign_flip_libraries.fillna('').ne('')]
     if len(bad):
@@ -352,6 +412,8 @@ def report(root, out, synthesis, nodes, figure_manifest):
               '这降低大类细胞比例混合的影响，不能证明绝对细胞数稳定。', '',
               '模块耦合另以九个 library 的相关性及去除组均值后的相关性描述（MODULE_COUPLING_DESCRIPTIVE.tsv）。'
               '每组只有三库，不将这些相关性解释为细胞间支持、通讯或功能韧性已恢复。', '',
+              'MODULE_TECHNICAL_CORRELATIONS.tsv 提供 library 中位 UMI/线粒体比例与各评分的相关性，'
+              '用于识别深度或细胞状态混杂；它不构成消除混杂后的因果估计。', '',
               '## 6. 未支持或无法建立的跨物种联系', '',
               '- 不存在本阶段证明的“蜂王型年轻化基因”或蜂王—年轻/工蜂—衰老对应。',
               '- 严格链映射覆盖不足的模块属于证据不可判定，不是生物学上不存在；完整一对多候选保留于映射明细。',

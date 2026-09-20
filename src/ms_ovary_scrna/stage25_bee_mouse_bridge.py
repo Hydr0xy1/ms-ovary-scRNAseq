@@ -166,7 +166,7 @@ def create_ledger(root, out):
         if axis not in MODULES:
             axis = 'unassigned'
         supported = r.V3_human_genelevel_supported == 'True'
-        add(r.gene, 'Homo_sapiens', 'ProjectA_human_state_readout_analysis', r.state,
+        add(r.gene, 'Homo_sapiens', 'GSE202601_fibro_like_states_ProjectA', r.state,
             r.evidence_tier, False, supported, not supported,
             r.V3_program_axis, 'human_readout_evidence.tsv.gz', r.source_row_1based,
             forced_modules=[axis], note='Human state readout; bee-prior rescue alone is hypothesis-only.')
@@ -245,7 +245,21 @@ def mapping_audit(root, out, ledger):
                           strict_mapping_coverage=float(status.eq('one_to_one').mean()),
                           limitation='Frozen strict human-mouse table does not expose discarded alternative pairs.'))
     for row in audit:
-        row['mapping_reference'] = 'Ensembl_strict_chain'
+        row['mapping_reference'] = ('NCBI_human_mouse_strict' if row['source_species']=='Homo_sapiens' else 'Ensembl_strict_chain')
+        row['audit_subset'] = 'all_frozen_evidence'
+    supported=detail[detail.mammalian_supported & ~detail.hypothesis_only]
+    for module,d in supported.groupby('module'):
+        d=d.drop_duplicates('source_gene')
+        status=d.mapping_status
+        audit.append(dict(source_species='Homo_sapiens',module=module,original_gene_count=len(d),
+                          successfully_mapped=int(status.ne('unmapped').sum()),
+                          one_to_one=int(status.eq('one_to_one').sum()),
+                          one_to_many=int(status.eq('one_to_many').sum()),
+                          non_strict_single_candidate=int(status.eq('non_strict_single_candidate').sum()),
+                          unmapped=int(status.eq('unmapped').sum()),mapping_coverage=float(status.ne('unmapped').mean()),
+                          strict_mapping_coverage=float(status.eq('one_to_one').mean()),
+                          mapping_reference='NCBI_human_mouse_strict',audit_subset='mammalian_supported_only',
+                          limitation='Independent audit of empirical human readouts, excluding hypothesis-only priors.'))
     eligible = detail.strict_one_to_one & ~detail.hypothesis_only & detail.module.isin(MODULES)
     definitions = []
     for scope, mask in {
@@ -288,6 +302,7 @@ def mapping_audit(root, out, ledger):
                           non_strict_single_candidate=0, unmapped=len(d)-n,
                           mapping_coverage=n/len(d), strict_mapping_coverage=np.nan,
                           mapping_reference='protein_RBH_reciprocal_unique_sensitivity',
+                          audit_subset='all_frozen_evidence',
                           limitation='1:1 within reciprocal protein hits, not proven evolutionary 1:1 orthology.'))
     mask = rbdetail.mouse_gene.ne('') & ~rbdetail.hypothesis_only & rbdetail.module.isin(MODULES)
     for (module, gene), d in rbdetail[mask].groupby(['module', 'mouse_gene']):
