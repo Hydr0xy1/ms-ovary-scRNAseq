@@ -35,3 +35,15 @@ Search date: 2026-10-09. PubMed was searched first and key records were verified
 - OC, OT and Y differences remain variable across the three libraries; the figure therefore makes no claim of a statistically resolved MRJP1-induced proliferation change.
 - A defensible conclusion is that MRJP1-treated ovaries retain a Granulosa-enriched cycling transcriptional compartment. EdU/BrdU, Ki67 and/or DNA-content measurements would be required to establish altered proliferation in situ.
 
+## How related studies present cell-cycle evidence
+
+- The goat ovarian-aging atlas (PMCID: PMC10699009, Fig. 3D) displays cell-cycle phase on a t-SNE embedding and separately reports the proportion of Granulosa cells in each phase. The essential quantitative component is therefore phase composition, not a score-range scatter plot.
+- The human ovarian-aging/FOXP1 study (PMCID: PMC11031396, Fig. 6 and Extended Data Fig. 8) does not treat transcriptomic phase assignment as sufficient evidence of proliferation. It supports the mechanism using EdU incorporation and Ki67 immunofluorescence.
+- The aging mouse-ovary atlas (PMCID: PMC10798902, Fig. 6) presents cell-type-specific pathway or upstream-regulator changes and then adds protein/imaging validation. This supports separating transcriptomic localization from functional validation.
+
+Accordingly, the revised presentation uses two independent figures:
+
+1. A 100% stacked bar chart of G1/S/G2M composition in every Granulosa library. This is the primary figure because it shows the biological replicate and the inferred phase directly.
+2. A cell-type-by-library heatmap of S+G2M percentages. This is the atlas overview and makes the Granulosa localization immediately visible.
+
+The earlier range-scatter figure is retained only for provenance and is no longer the recommended main display.
