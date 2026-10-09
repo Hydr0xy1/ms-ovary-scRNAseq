@@ -118,13 +118,16 @@ def granulosa_source(table: pd.DataFrame) -> pd.DataFrame:
 def cycling_heatmap_source(table: pd.DataFrame) -> pd.DataFrame:
     source = table.loc[
         table["cell_type_broad_v2"].isin(CURATED_CELL_TYPES)
-        & table["phase"].astype(str).isin(["S", "G2M"])
     ].copy()
     source["library_id"] = source["library_id"].astype(str)
+    # 先保留所有已观察到的分母：有细胞但没有 S/G2M 应是 0%，不是缺失。
+    source["cycling_cells"] = source["n_cells"].where(
+        source["phase"].astype(str).isin(["S", "G2M"]), 0
+    )
     source = (
         source.groupby(["cell_type_broad_v2", "library_id", "group"], observed=True)
         .agg(
-            cycling_cells=("n_cells", "sum"),
+            cycling_cells=("cycling_cells", "sum"),
             total_cells=("total_cells", "first"),
         )
         .reset_index()
